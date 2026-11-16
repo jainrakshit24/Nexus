@@ -75,3 +75,50 @@ def test_show_prints_supersede_history(repo, capsys):
     assert run(["--root", str(repo), "show", "db"]) == 0
     out = capsys.readouterr().out
     assert "MySQL" in out and "Postgres" in out
+
+
+# ---------- Phase 2 commands ----------
+
+def test_graph_command_without_a_graph_exits_6(repo, capsys):
+    run(["init", str(repo), "--here"])
+    assert run(["--root", str(repo), "graph"]) == 6
+    assert "/graphify" in capsys.readouterr().err
+
+
+def test_impact_without_a_graph_still_answers_from_text(repo, capsys):
+    run(["init", str(repo), "--here"])
+    (repo / "a.py").write_text("def alpha():\n    return 1\n")
+    (repo / "b.py").write_text("from a import alpha\n\ndef beta():\n    return alpha()\n")
+    assert run(["--root", str(repo), "impact", "a.py"]) == 0
+    out = capsys.readouterr().out
+    assert "b.py" in out and "text-only evidence" in out
+
+
+def test_impact_json_is_machine_readable(repo, capsys):
+    import json as _json
+    run(["init", str(repo), "--here"])
+    (repo / "a.py").write_text("def alpha():\n    return 1\n")
+    (repo / "b.py").write_text("from a import alpha\n")
+    capsys.readouterr()  # drop init's output so only the JSON remains
+    assert run(["--root", str(repo), "impact", "a.py", "--json"]) == 0
+    payload = _json.loads(capsys.readouterr().out)
+    assert payload["target"] == "a.py"
+    assert {"blast_radius", "gear", "reason", "dependents"} <= set(payload)
+
+
+def test_context_respects_the_budget_and_logs_the_three_numbers(repo, capsys):
+    run(["init", str(repo), "--here"])
+    (repo / "a.py").write_text("def alpha():\n    return 1\n" + "# filler\n" * 400)
+    assert run(["--root", str(repo), "context", "refactor", "a.py", "--budget", "500"]) == 0
+    cap = capsys.readouterr()
+    from nexus import tokens as tk
+    assert tk.count(cap.out) <= 500 * 1.4
+    assert "estimated" in cap.err and "measured" in cap.err
+
+
+def test_tokens_command_reports_host_usage_as_unavailable_when_absent(repo, capsys):
+    run(["init", str(repo), "--here"])
+    assert run(["--root", str(repo), "tokens"]) == 0
+    out = capsys.readouterr().out
+    assert "saved    (estimated)" in out
+    assert "unavailable" in out

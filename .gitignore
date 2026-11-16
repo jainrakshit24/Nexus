@@ -10,3 +10,12 @@ venv/
 # A project's own memory index is a rebuildable cache, never committed.
 .nexus/index.db
 .nexus/index.db-*
+
+# graphify build output — generated, not source
+graphify-out/
+
+# NEXUS working data for this repo itself (dogfooding), not source
+.nexus/
+
+# Serena language-server cache and local project config — generated
+.serena/

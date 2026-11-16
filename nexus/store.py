@@ -20,6 +20,11 @@ TIER_DIR = {
     "episodic": "episodes",
 }
 
+# Bump when the index schema or the FTS tokenizer changes: a stale index is
+# silently wrong (an old tokenizer keeps ranking by the old rules), so the
+# store rebuilds itself from Markdown instead of trusting it.
+SCHEMA_VERSION = 2
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS records (
     id TEXT PRIMARY KEY, name TEXT, type TEXT, confidence TEXT, source TEXT,
@@ -29,7 +34,7 @@ CREATE TABLE IF NOT EXISTS records (
 CREATE INDEX IF NOT EXISTS idx_name_type ON records(name, type);
 CREATE INDEX IF NOT EXISTS idx_live ON records(superseded_by);
 CREATE VIRTUAL TABLE IF NOT EXISTS records_fts
-    USING fts5(id UNINDEXED, name, body, tags, source);
+    USING fts5(id UNINDEXED, name, body, tags, source, tokenize='porter unicode61');
 """
 
 
@@ -60,6 +65,7 @@ class Store:
         self.dir = self.root / NEXUS_DIR
         self.db_path = self.dir / "index.db"
         self._db: sqlite3.Connection | None = None
+        self._stale_schema: int | None = None
 
     # ---------- setup ----------
 
@@ -82,10 +88,25 @@ class Store:
     def db(self) -> sqlite3.Connection:
         if self._db is None:
             self.dir.mkdir(parents=True, exist_ok=True)
+            fresh = not self.db_path.exists()
             self._db = sqlite3.connect(self.db_path)
             self._db.row_factory = sqlite3.Row
             self._db.executescript(SCHEMA)
+            found = self._db.execute("PRAGMA user_version").fetchone()[0]
+            if fresh or found == 0:
+                self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+                self._db.commit()
+            elif found != SCHEMA_VERSION:
+                self._stale_schema = found
         return self._db
+
+    def ensure_current_schema(self) -> int | None:
+        """Rebuild the index if it was written by an older schema. Returns rows rebuilt."""
+        self.db  # noqa: B018 - opening the db is what detects the mismatch
+        if getattr(self, "_stale_schema", None) is None:
+            return None
+        n = self.reindex()
+        return n
 
     # ---------- paths ----------
 
@@ -167,6 +188,8 @@ class Store:
     def reindex(self) -> int:
         self.db.executescript("DROP TABLE IF EXISTS records; DROP TABLE IF EXISTS records_fts;")
         self.db.executescript(SCHEMA)
+        self.db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        self._stale_schema = None
         n = 0
         for path in self.all_files():
             try:

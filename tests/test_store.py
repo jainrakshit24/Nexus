@@ -100,3 +100,23 @@ def test_episodic_records_are_filed_by_month(store: Store):
     path = store.path_for(rec)
     assert path.parent.name == rec.created_at[:7]
     assert path.exists()
+
+
+def test_an_index_from_an_older_schema_is_rebuilt_not_trusted(store: Store):
+    """A stale tokenizer silently changes ranking, so the index must not be reused."""
+    store.write(Record(name="a", type="project", body="Rate limiting happens at the gateway."))
+    store.db.execute("PRAGMA user_version = 1")
+    store.db.commit()
+    store._db = None
+    store._stale_schema = None
+
+    fresh = Store(store.root)
+    assert fresh.ensure_current_schema() == 1       # rebuilt one record
+    assert fresh.recall("rate limiting")[0]["name"] == "a"
+    assert fresh.ensure_current_schema() is None    # already current, no second rebuild
+
+
+def test_stemming_matches_a_different_word_form(store: Store):
+    store.write(Record(name="deploys", type="project",
+                       body="Deployments are blue green with a soak period."))
+    assert [r["name"] for r in store.recall("deployment")] == ["deploys"]

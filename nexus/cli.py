@@ -7,14 +7,20 @@ import sys
 import time
 from pathlib import Path
 
-from . import discover, scrub
+from . import context as context_mod
+from . import discover, graph as graph_mod, scrub, tokens as tokens_mod
+from .impact import analyze
 from .record import CONFIDENCE, TIERS, Record
 from .store import NotInitialized, Store, find_root, git_root
 
 
 def _store(args) -> Store:
     root = Path(args.root).resolve() if getattr(args, "root", None) else find_root()
-    return Store(root)
+    store = Store(root)
+    rebuilt = store.ensure_current_schema()
+    if rebuilt is not None:
+        print(f"index schema changed — rebuilt {rebuilt} record(s) from Markdown", file=sys.stderr)
+    return store
 
 
 def _warn(warnings: list[scrub.Finding]) -> None:
@@ -153,6 +159,93 @@ def cmd_status(args) -> int:
     return 0
 
 
+
+def cmd_impact(args) -> int:
+    store = _store(args)
+    imp = analyze(store.root, args.target, use_graph=not args.no_graph, depth=args.depth,
+                  use_serena=args.serena)
+
+    if args.json:
+        print(json.dumps({
+            "target": imp.target, "blast_radius": imp.blast_radius, "gear": imp.gear,
+            "reason": imp.reason(), "graph_available": imp.graph_available,
+            "staleness": imp.staleness.summary() if imp.staleness else None,
+            "dependents": [{"file": d.file, "strength": d.strength, "hops": d.hops,
+                            "sources": sorted(d.sources), "relations": sorted(d.relations),
+                            "symbols": d.symbols_hit} for d in imp.dependents],
+            "notes": imp.notes,
+        }, indent=2))
+        return 0
+
+    print(f"{imp.target}  blast radius {imp.blast_radius} -> workflow: {imp.gear}")
+    print(f"  reason: {imp.reason()}")
+    print(f"  graph : {imp.staleness.summary() if imp.staleness else 'unavailable'}")
+    for n in imp.notes:
+        print(f"  note  : {n}")
+    if not imp.dependents:
+        print("  no dependents found")
+        return 0
+    print()
+    for d in imp.dependents:
+        rel = ", ".join(sorted(d.relations)) or "-"
+        hop = f"{d.hops} hop" if d.hops else "text"
+        print(f"  [{d.strength:6}] {d.file:<32} {hop:<6} via {','.join(sorted(d.sources)):<16} {rel}")
+    return 0
+
+
+def cmd_context(args) -> int:
+    store = _store(args)
+    pack = context_mod.build(store.root, " ".join(args.task), budget=args.budget)
+    print(pack.render())
+    acc = pack.accounting()
+    if not args.no_log:
+        tokens_mod.record(store.root, acc)
+    for line in acc.lines():
+        print(line, file=sys.stderr)
+    if pack.actual > pack.budget:  # cannot happen; assert it loudly if it ever does
+        print(f"BUG: pack {pack.actual} exceeds budget {pack.budget}", file=sys.stderr)
+        return 5
+    return 0
+
+
+def cmd_tokens(args) -> int:
+    store = _store(args)
+    t = tokens_mod.totals(store.root)
+    print(f"packs                : {t['packs']:>8,}")
+    print(f"actual   (measured)  : {t['actual_measured']:>8,} tokens   [{t['tokenizer']}]")
+    print(f"baseline (measured)  : {t['baseline_measured']:>8,} tokens   [full-file reads of the same files]")
+    print(f"saved    (estimated) : {t['saved_estimated']:>8,} tokens   [baseline - actual; the baseline was never run]")
+    usage = tokens_mod.platform_usage(store.root)
+    if usage.get("available"):
+        print(f"host reported usage  : {usage['input_tokens']:>8,} in / {usage['output_tokens']:,} out "
+              f"[{usage['transcripts']} transcript(s)]")
+    else:
+        print(f"host reported usage  : unavailable   [{usage['reason']}]")
+    return 0
+
+
+def cmd_graph(args) -> int:
+    store = _store(args)
+    try:
+        g = graph_mod.load(store.root)
+    except graph_mod.GraphMissing as e:
+        print(str(e), file=sys.stderr)
+        return 6
+    s = g.staleness(store.root, extensions={".py", ".js", ".ts", ".go", ".rs"})
+    print(f"graph dir : {g.dir}")
+    print(f"built on  : {g.graph_root}")
+    print(f"size      : {len(g.nodes)} nodes, {len(g.links)} links (directed={g.directed})")
+    print(f"freshness : {s.summary()}")
+    for label, items in (("changed", s.changed), ("deleted", s.deleted), ("never indexed", s.unindexed)):
+        for f in items[:args.limit]:
+            print(f"  {label:13}: {f}")
+        if len(items) > args.limit:
+            print(f"  {label:13}: ... and {len(items)-args.limit} more")
+    if s.is_stale:
+        print("\nRebuild with `/graphify . --update` in your agent. NEXUS reads graphs; it does not build them.")
+    return 0
+
+
 # ---------- parser ----------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -195,6 +288,28 @@ def build_parser() -> argparse.ArgumentParser:
 
     x = sub.add_parser("reindex", help="rebuild the SQLite index from Markdown")
     x.set_defaults(func=cmd_reindex)
+
+    im = sub.add_parser("impact", help="what else moves if this changes")
+    im.add_argument("target", help="file path or symbol name")
+    im.add_argument("--no-graph", action="store_true", help="text evidence only")
+    im.add_argument("--depth", type=int, default=1, help="reverse-edge hops to follow (2 finds transitive breakage)")
+    im.add_argument("--serena", action="store_true",
+                    help="also ask the language server (Serena); accurate but costs a few seconds")
+    im.add_argument("--json", action="store_true")
+    im.set_defaults(func=cmd_impact)
+
+    cx = sub.add_parser("context", help="assemble context for a task, under a token budget")
+    cx.add_argument("task", nargs="+")
+    cx.add_argument("--budget", type=int, default=4000)
+    cx.add_argument("--no-log", action="store_true", help="do not append to the token log")
+    cx.set_defaults(func=cmd_context)
+
+    tk = sub.add_parser("tokens", help="token accounting for this project")
+    tk.set_defaults(func=cmd_tokens)
+
+    gr = sub.add_parser("graph", help="knowledge graph status and freshness")
+    gr.add_argument("--limit", type=int, default=10)
+    gr.set_defaults(func=cmd_graph)
 
     s = sub.add_parser("status", help="store summary")
     s.add_argument("--json", action="store_true")
