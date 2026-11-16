@@ -101,7 +101,35 @@ Four to five seconds per invocation is why this is behind a flag and not the def
 The graph answers the same question in milliseconds; Serena is for when precision
 matters more than latency, or for languages graphify's extractor does not parse.
 
-## 6. Test suite
+## 6. Cold start on a large repository
 
-`python3 -m pytest tests -q` — **83 tests, 2.7 s**, across 9 modules.
-MCP client tests run against a fake stdio server, so they need no network and no `uvx`.
+`python3 bench/run_coldstart.py --files 10000` — a synthetic repo of **10,101 Python
+files, 2.5 MB**, in a 101-package layout with cross-package imports.
+
+| Step | Cold cost |
+|---|---|
+| discovery (`nexus init`: stack, test command, file census) | **101 ms** |
+| store init + empty index | 17 ms |
+| writing 200 memory records | 597 ms (3 ms each) |
+| first recall | 1.8 ms |
+| outline one module | 0.5 ms |
+| **impact, no graph** (text pass over 10,101 files) | **318 ms** |
+| dashboard state | 2.7 ms |
+| **MCP server launch → initialize** | **44 ms** |
+| `tools/list` | 0.1 ms |
+| first `nexus_recall` over MCP | 2.7 ms |
+
+So a host attaching to a 10k-file project is answering in **under 50 ms**, and the
+most expensive single operation is impact analysis *without* a graph, at 0.3 s,
+because it reads every text file. With a graph, the reverse-edge lookup is a dict
+traversal and the text pass is the fallback rather than the path.
+
+**Read this honestly.** The corpus is synthetic: files are smaller and far more
+uniform than real source. Treat these as a floor. Graph build time is not included
+because NEXUS does not build graphs — `/graphify` does.
+
+## 7. Test suite
+
+`python3 -m pytest tests -q` — **178 tests, 5.0 s**, across 13 modules.
+MCP client tests run against a fake stdio server and MCP *server* tests run against
+real subprocesses, so neither needs network access or `uvx`.

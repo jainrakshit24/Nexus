@@ -8,7 +8,8 @@ import time
 from pathlib import Path
 
 from . import context as context_mod
-from . import adr as adr_mod
+from . import adapters, adr as adr_mod
+from . import dashboard as dash_mod, hooks as hooks_mod, server as server_mod
 from . import discover, envman, gate as gate_mod, graph as graph_mod, scrub, tokens as tokens_mod
 from .impact import analyze
 from .record import CONFIDENCE, TIERS, Record
@@ -368,6 +369,53 @@ def cmd_debt(args) -> int:
     return 0
 
 
+
+def cmd_serve(args) -> int:
+    """Run the MCP server. stdout is JSON-RPC only — never print here."""
+    root = Path(args.root).resolve() if args.root else find_root()
+    print(f"nexus MCP server on {root} (stdio)", file=sys.stderr)
+    return server_mod.Server(root).serve()
+
+
+def cmd_dashboard(args) -> int:
+    store = _store(args)
+    if args.compact:
+        print(dash_mod.compact_line(dash_mod.state(store.root)))
+        return 0
+    if args.json:
+        print(json.dumps(dash_mod.state(store.root), indent=2))
+        return 0
+    if args.static:
+        out = dash_mod.render_static(store.root, Path(args.static))
+        print(f"wrote {out}")
+        return 0
+    dash_mod.serve(store.root, port=args.port, open_browser=not args.no_open)
+    return 0
+
+
+def cmd_install(args) -> int:
+    store = _store(args)
+    hosts = sorted(adapters.HOSTS) if args.host == "all" else [args.host]
+    for host in hosts:
+        arts = adapters.generate(host, store.root, python=args.python)
+        print(f"\n== {host} ==")
+        if args.dry_run:
+            for a in arts:
+                print(f"  {a.path}  — {a.note}")
+            continue
+        for path, outcome in adapters.write(store.root, arts, force=args.force):
+            print(f"  {path:<34} {outcome}")
+        for a in arts:
+            if a.path.startswith("~"):
+                print(f"\n  --- apply by hand: {a.path} ---")
+                print("\n".join("  " + l for l in a.content.splitlines()))
+    return 0
+
+
+def cmd_hook(args) -> int:
+    return hooks_mod.run(args.name, root_hint=args.root)
+
+
 # ---------- parser ----------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -468,6 +516,28 @@ def build_parser() -> argparse.ArgumentParser:
     dt_add.add_argument("--tag", action="append")
     dt_sub.add_parser("list")
     dt.set_defaults(func=cmd_debt)
+
+    sv = sub.add_parser("serve", help="run the MCP server over stdio (for agent hosts)")
+    sv.set_defaults(func=cmd_serve)
+
+    db = sub.add_parser("dashboard", help="local monitoring page (127.0.0.1 only)")
+    db.add_argument("--port", type=int, default=7373)
+    db.add_argument("--compact", action="store_true", help="one line, for a status line")
+    db.add_argument("--json", action="store_true")
+    db.add_argument("--static", metavar="FILE", help="write a snapshot page instead of serving")
+    db.add_argument("--no-open", action="store_true", help="do not open a browser")
+    db.set_defaults(func=cmd_dashboard)
+
+    ins = sub.add_parser("install", help="write host configuration for an agent")
+    ins.add_argument("host", choices=[*sorted(adapters.HOSTS), "all"])
+    ins.add_argument("--python", help="interpreter the host should launch")
+    ins.add_argument("--force", action="store_true", help="overwrite existing files")
+    ins.add_argument("--dry-run", action="store_true")
+    ins.set_defaults(func=cmd_install)
+
+    hk = sub.add_parser("hook", help="agent host hook handler (reads JSON on stdin)")
+    hk.add_argument("name", choices=sorted(hooks_mod.HANDLERS))
+    hk.set_defaults(func=cmd_hook)
 
     s = sub.add_parser("status", help="store summary")
     s.add_argument("--json", action="store_true")

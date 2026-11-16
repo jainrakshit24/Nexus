@@ -11,7 +11,7 @@ import subprocess
 import threading
 from typing import Any
 
-PROTOCOL_VERSION = "2026-11-05"
+PROTOCOL_VERSION = "2025-06-18"
 
 
 class MCPError(Exception):

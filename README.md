@@ -3,7 +3,7 @@
 Local-first engineering companion: understands a codebase, remembers its evolution,
 protects its integrity, and carries that context across Claude Code, Codex and Cursor.
 
-**Status:** Phases 1–3 complete (137 tests green). See `docs/PHASE1.md`, `docs/PHASE2.md`, `docs/PHASE3.md`, `docs/BENCHMARK.md`. Phase 4 next.
+**Status:** all four phases complete — **178 tests green**. See `docs/PHASE1.md` … `docs/PHASE4.md`, with measurements in `docs/BENCHMARK.md` and host support in `docs/COMPATIBILITY.md`.
 
 - `docs/RESEARCH.md` — what already exists, licenses, what to reuse vs build
 - `docs/BLUEPRINT.md` — architecture, memory lifecycle, storage, security, token strategy
@@ -38,6 +38,27 @@ nexus adr new "Title" --affects src/billing.py
 nexus env --write            # .env.example from keys only, never values
 nexus debt add "..." --where src/billing.py:40
 ```
+
+## Use it from your agent
+
+```bash
+nexus install claude-code     # or codex / cursor / vscode / all
+nexus install all --dry-run   # see what would be written first
+```
+
+That points the host at `nexus serve`, an MCP server exposing five tools:
+`nexus_recall`, `nexus_remember`, `nexus_impact`, `nexus_context`, `nexus_gate`.
+Host support, tested and untested, is listed in `docs/COMPATIBILITY.md`.
+
+## Watch it
+
+```bash
+nexus dashboard               # localhost page, 127.0.0.1 only
+nexus dashboard --compact     # one line, for a status bar
+```
+
+The dashboard reads `.nexus/` on disk. It is not reachable from the MCP server,
+so it costs the agent zero context tokens — enforced by a test, not a promise.
 
 Requires a graphify graph for the strongest impact evidence: run `/graphify .`
 in your agent once, then `--update` when it goes stale. NEXUS reads graphs; it
