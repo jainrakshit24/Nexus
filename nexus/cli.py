@@ -8,7 +8,8 @@ import time
 from pathlib import Path
 
 from . import context as context_mod
-from . import discover, graph as graph_mod, scrub, tokens as tokens_mod
+from . import adr as adr_mod
+from . import discover, envman, gate as gate_mod, graph as graph_mod, scrub, tokens as tokens_mod
 from .impact import analyze
 from .record import CONFIDENCE, TIERS, Record
 from .store import NotInitialized, Store, find_root, git_root
@@ -246,6 +247,127 @@ def cmd_graph(args) -> int:
     return 0
 
 
+
+def cmd_plan(args) -> int:
+    store = _store(args)
+    plan = gate_mod.pre_edit(store.root, args.targets, depth=args.depth)
+    path = gate_mod.save_plan(store.root, plan)
+    print(plan.render())
+    print(f"saved to {path}", file=sys.stderr)
+    if plan.blocked:
+        print("BLOCKED: this change needs an ADR before you edit. "
+              f'Run: nexus adr new "<title>" --affects {plan.targets[0]}', file=sys.stderr)
+        return 7
+    return 0
+
+
+def _confirm_revert(files: list[str]) -> bool:
+    print(f"\nAbout to DISCARD local changes to {len(files)} file(s):", file=sys.stderr)
+    for f in files:
+        print(f"  {f}", file=sys.stderr)
+    try:
+        return input("This cannot be undone. Type 'yes' to proceed: ").strip().lower() == "yes"
+    except (EOFError, KeyboardInterrupt):
+        print("\nnot confirmed — nothing was changed", file=sys.stderr)
+        return False
+
+
+def cmd_verify(args) -> int:
+    store = _store(args)
+    verdict = gate_mod.post_edit(store.root, test_command=args.test_command, run=not args.no_tests)
+    print(verdict.render())
+
+    if args.revert_unintended and verdict.unintended:
+        reverted = gate_mod.revert_unintended(store.root, verdict.unintended, _confirm_revert)
+        print(f"reverted {len(reverted)} file(s)" if reverted else "nothing was reverted",
+              file=sys.stderr)
+
+    return {"PASS": 0, "REVIEW": 0, "UNVERIFIED": 8, "FAIL": 9, "BLOCKED": 10}[verdict.status]
+
+
+def cmd_adr(args) -> int:
+    store = _store(args)
+    if args.adr_cmd == "list":
+        rows = adr_mod.existing(store.root)
+        if not rows:
+            print("no ADRs yet")
+            return 1
+        for r in rows:
+            print(f"{r['number']}  {r['status']:<10} {r['title']}  ({r['path']})")
+        return 0
+
+    path = adr_mod.create(store.root, args.title, affects=args.affects or [],
+                          decision=args.decision or "")
+    print(f"created {path.relative_to(store.root)}")
+    print("fill in the TODO sections before you edit the code they justify", file=sys.stderr)
+    return 0
+
+
+def cmd_env(args) -> int:
+    store = _store(args)
+    rep = envman.report(store.root)
+
+    if args.json:
+        print(json.dumps({
+            "used_in_code": rep.used_in_code,
+            "declared": sorted(rep.declared),
+            "in_example": sorted(rep.in_example),
+            "undeclared": sorted(rep.undeclared),
+            "unused": sorted(rep.unused),
+            "missing_at_runtime": sorted(rep.missing_at_runtime),
+            "gitignore_protects_env": envman.gitignore_protects_env(store.root),
+        }, indent=2))
+        return 0
+
+    print(f"variables read by the code : {len(rep.used_in_code)}")
+    print(f"declared in .env* files    : {len(rep.declared)}  (names only — values never read)")
+    print(f"present in .env.example    : {len(rep.in_example)}")
+    for label, items in (("declared nowhere", rep.undeclared),
+                         ("missing from .env.example", rep.missing_from_example),
+                         ("declared but unused", rep.unused),
+                         ("not set in this shell", rep.missing_at_runtime)):
+        if items:
+            print(f"\n{label}:")
+            for k in sorted(items):
+                where = rep.used_in_code.get(k)
+                print(f"  {k}" + (f"   ({where[0]})" if where else ""))
+
+    if not envman.gitignore_protects_env(store.root):
+        print("\nWARNING: .gitignore does not exclude .env — a real secret could be committed",
+              file=sys.stderr)
+
+    if args.write:
+        path = envman.write_example(store.root, rep)
+        print(f"\nwrote {path.relative_to(store.root)} ({len(set(rep.used_in_code) | rep.declared)} keys, placeholders only)")
+    return 0
+
+
+def cmd_debt(args) -> int:
+    store = _store(args)
+    if args.debt_cmd == "list":
+        rows = [r for r in store.recall("technical debt shortcut", limit=100)
+                if "debt" in r["tags"]]
+        if not rows:
+            print("no technical debt recorded")
+            return 1
+        for r in rows:
+            body = Path(r["path"]).read_text(encoding="utf-8").split("---", 2)[-1].strip()
+            print(f"- {r['name']} [{r['confidence']}] {r['source'] or ''}\n    {body.splitlines()[0]}")
+        return 0
+
+    rec = Record(name=args.name or " ".join(args.text.split()[:8]), type="project",
+                 body=args.text, confidence="observed",
+                 source=args.where or "", tags=["debt", *(args.tag or [])])
+    try:
+        action, rec, warnings = store.write(rec)
+    except scrub.SecretFound as e:
+        print(f"BLOCKED: {e}", file=sys.stderr)
+        return 3
+    _warn(warnings)
+    print(f"{action}: {rec.name} [debt]")
+    return 0
+
+
 # ---------- parser ----------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -310,6 +432,42 @@ def build_parser() -> argparse.ArgumentParser:
     gr = sub.add_parser("graph", help="knowledge graph status and freshness")
     gr.add_argument("--limit", type=int, default=10)
     gr.set_defaults(func=cmd_graph)
+
+    pl = sub.add_parser("plan", help="pre-edit gate: what this change touches and who it needs")
+    pl.add_argument("targets", nargs="+")
+    pl.add_argument("--depth", type=int, default=2)
+    pl.set_defaults(func=cmd_plan)
+
+    vf = sub.add_parser("verify", help="post-edit gate: diff, secrets, tests")
+    vf.add_argument("--no-tests", action="store_true", help="skip execution (reports UNVERIFIED)")
+    vf.add_argument("--test-command", help="override the detected test command")
+    vf.add_argument("--revert-unintended", action="store_true",
+                    help="offer to discard changes the plan did not name (asks first)")
+    vf.set_defaults(func=cmd_verify)
+
+    ad = sub.add_parser("adr", help="architecture decision records")
+    ad_sub = ad.add_subparsers(dest="adr_cmd", required=True)
+    ad_new = ad_sub.add_parser("new")
+    ad_new.add_argument("title")
+    ad_new.add_argument("--affects", action="append")
+    ad_new.add_argument("--decision")
+    ad_sub.add_parser("list")
+    ad.set_defaults(func=cmd_adr)
+
+    ev = sub.add_parser("env", help="environment variables: used, declared, missing")
+    ev.add_argument("--write", action="store_true", help="write .env.example (placeholders only)")
+    ev.add_argument("--json", action="store_true")
+    ev.set_defaults(func=cmd_env)
+
+    dt = sub.add_parser("debt", help="technical debt registry")
+    dt_sub = dt.add_subparsers(dest="debt_cmd", required=True)
+    dt_add = dt_sub.add_parser("add")
+    dt_add.add_argument("text")
+    dt_add.add_argument("--name")
+    dt_add.add_argument("--where", help="file:line this debt lives at")
+    dt_add.add_argument("--tag", action="append")
+    dt_sub.add_parser("list")
+    dt.set_defaults(func=cmd_debt)
 
     s = sub.add_parser("status", help="store summary")
     s.add_argument("--json", action="store_true")

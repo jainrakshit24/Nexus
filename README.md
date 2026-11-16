@@ -3,7 +3,7 @@
 Local-first engineering companion: understands a codebase, remembers its evolution,
 protects its integrity, and carries that context across Claude Code, Codex and Cursor.
 
-**Status:** Phases 1–2 complete (83 tests green). See `docs/PHASE1.md`, `docs/PHASE2.md`, `docs/BENCHMARK.md`. Phase 3 next.
+**Status:** Phases 1–3 complete (137 tests green). See `docs/PHASE1.md`, `docs/PHASE2.md`, `docs/PHASE3.md`, `docs/BENCHMARK.md`. Phase 4 next.
 
 - `docs/RESEARCH.md` — what already exists, licenses, what to reuse vs build
 - `docs/BLUEPRINT.md` — architecture, memory lifecycle, storage, security, token strategy
@@ -31,6 +31,12 @@ nexus graph                  # graph size + staleness, no rebuild
 nexus impact nexus/store.py --depth 2   # what breaks if this changes
 nexus context "refactor X" --budget 4000
 nexus tokens                 # actual / baseline / estimated saved
+
+nexus plan src/billing.py    # pre-edit: dependents, roles, risks, ADR check
+nexus verify                 # post-edit: diff, secrets, tests (really runs them)
+nexus adr new "Title" --affects src/billing.py
+nexus env --write            # .env.example from keys only, never values
+nexus debt add "..." --where src/billing.py:40
 ```
 
 Requires a graphify graph for the strongest impact evidence: run `/graphify .`

@@ -122,3 +122,75 @@ def test_tokens_command_reports_host_usage_as_unavailable_when_absent(repo, caps
     out = capsys.readouterr().out
     assert "saved    (estimated)" in out
     assert "unavailable" in out
+
+
+# ---------- Phase 3 commands ----------
+
+def test_plan_blocks_with_exit_7_when_an_adr_is_missing(repo, capsys):
+    run(["init", str(repo), "--here"])
+    (repo / "schema.sql").write_text("CREATE TABLE t (id int);\n")
+    capsys.readouterr()
+    assert run(["--root", str(repo), "plan", "schema.sql"]) == 7
+    cap = capsys.readouterr()
+    assert "REQUIRED and MISSING" in cap.out
+    assert "nexus adr new" in cap.err
+
+
+def test_adr_new_then_plan_passes(repo, capsys):
+    run(["init", str(repo), "--here"])
+    (repo / "schema.sql").write_text("CREATE TABLE t (id int);\n")
+    assert run(["--root", str(repo), "adr", "new", "Add the t table", "--affects", "schema.sql"]) == 0
+    assert run(["--root", str(repo), "plan", "schema.sql"]) == 0
+
+
+def test_adr_list_is_empty_before_any_exist(repo, capsys):
+    run(["init", str(repo), "--here"])
+    assert run(["--root", str(repo), "adr", "list"]) == 1
+
+
+def test_adr_is_indexed_into_memory(repo, capsys):
+    run(["init", str(repo), "--here"])
+    run(["--root", str(repo), "adr", "new", "Use gRPC between services",
+         "--decision", "Internal calls use gRPC."])
+    capsys.readouterr()
+    assert run(["--root", str(repo), "recall", "grpc", "between", "services"]) == 0
+    assert "adr-0001" in capsys.readouterr().out
+
+
+def test_verify_without_tests_reports_unverified_exit_8(repo, capsys):
+    run(["init", str(repo), "--here"])
+    assert run(["--root", str(repo), "verify", "--no-tests"]) == 8
+    assert "UNVERIFIED" in capsys.readouterr().out
+
+
+def test_env_write_produces_placeholders_only(repo, capsys):
+    run(["init", str(repo), "--here"])
+    (repo / "svc.py").write_text('import os\nX = os.environ["API_BASE_URL"]\n')
+    capsys.readouterr()
+    assert run(["--root", str(repo), "env", "--write"]) == 0
+    text = (repo / ".env.example").read_text()
+    assert "API_BASE_URL=<set-me>" in text
+
+
+def test_env_warns_when_gitignore_does_not_cover_env(repo, capsys):
+    run(["init", str(repo), "--here"])
+    (repo / "svc.py").write_text('import os\nX = os.environ["API_BASE_URL"]\n')
+    capsys.readouterr()
+    run(["--root", str(repo), "env"])
+    assert "does not exclude .env" in capsys.readouterr().err
+
+
+def test_debt_add_then_list(repo, capsys):
+    run(["init", str(repo), "--here"])
+    assert run(["--root", str(repo), "debt", "add",
+                "Retry logic is duplicated in three callers.",
+                "--name", "retry-duplication", "--where", "svc.py:40"]) == 0
+    capsys.readouterr()
+    assert run(["--root", str(repo), "debt", "list"]) == 0
+    assert "retry-duplication" in capsys.readouterr().out
+
+
+def test_debt_with_a_credential_is_blocked(repo, capsys):
+    run(["init", str(repo), "--here"])
+    assert run(["--root", str(repo), "debt", "add",
+                "hardcoded key AKIA1234567890ABCDEF still in prod"]) == 3
