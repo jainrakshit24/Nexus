@@ -3,7 +3,7 @@
 Local-first engineering companion: understands a codebase, remembers its evolution,
 protects its integrity, and carries that context across Claude Code, Codex and Cursor.
 
-**Status:** five phases complete — **209 tests green**. See `docs/PHASE1.md` … `docs/PHASE5.md`, with measurements in `docs/BENCHMARK.md`, host support in `docs/COMPATIBILITY.md`, and decisions in `docs/adr/`.
+**Status:** six phases complete — **291 tests green**, `ruff check` clean. See `docs/PHASE1.md` … `docs/PHASE6.md`, with measurements in `docs/BENCHMARK.md`, host support in `docs/COMPATIBILITY.md`, and decisions in `docs/adr/`.
 
 - `docs/RESEARCH.md` — what already exists, licenses, what to reuse vs build
 - `docs/BLUEPRINT.md` — architecture, memory lifecycle, storage, security, token strategy

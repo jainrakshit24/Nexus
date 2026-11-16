@@ -135,7 +135,12 @@ def analyze(root: Path, target: str, use_graph: bool = True, depth: int = 1,
         else:
             staleness = graph.staleness(root, extensions={".py", ".js", ".ts", ".go", ".rs"})
             kind, node_ids = graph.resolve(target)
-            if kind == "none":
+            if kind == "ambiguous":
+                notes.append(f"'{target}' matches {len(node_ids)} files in the graph "
+                             f"({', '.join(node_ids[:4])}{'…' if len(node_ids) > 4 else ''}) — "
+                             f"pass a full path; graph evidence withheld rather than guessed")
+                node_ids = []
+            elif kind == "none":
                 notes.append(f"'{target}' is not in the graph — graph evidence unavailable")
             else:
                 for dep in graph.dependents(node_ids, depth=depth):

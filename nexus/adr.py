@@ -50,7 +50,7 @@ def existing(root: Path) -> list[dict]:
     for f in sorted(d.glob("*.md")):
         m = NUM_RE.match(f.name)
         text = f.read_text(encoding="utf-8", errors="replace")
-        title = next((l[2:].strip() for l in text.splitlines() if l.startswith("# ")), f.stem)
+        title = next((ln[2:].strip() for ln in text.splitlines() if ln.startswith("# ")), f.stem)
         status = "unknown"
         sm = re.search(r"\*\*Status:\*\*\s*([A-Za-z-]+)", text)
         if sm:

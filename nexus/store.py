@@ -1,6 +1,7 @@
 """Memory store: Markdown is the truth, SQLite FTS5 is a rebuildable index."""
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sqlite3
@@ -24,14 +25,14 @@ TIER_DIR = {
 # Bump when the index schema or the FTS tokenizer changes: a stale index is
 # silently wrong (an old tokenizer keeps ranking by the old rules), so the
 # store rebuilds itself from Markdown instead of trusting it.
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS records (
     id TEXT PRIMARY KEY, name TEXT, type TEXT, confidence TEXT, source TEXT,
     created_at TEXT, verified_at TEXT, supersedes TEXT, superseded_by TEXT,
     graph_refs TEXT, tags TEXT, path TEXT, hash TEXT, ref_files TEXT,
-    consolidated_into TEXT DEFAULT ''
+    consolidated_into TEXT DEFAULT '', anchor_hash TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_name_type ON records(name, type);
 CREATE INDEX IF NOT EXISTS idx_live ON records(superseded_by, consolidated_into);
@@ -78,7 +79,7 @@ class Store:
     # ---------- setup ----------
 
     @classmethod
-    def init(cls, root: Path) -> "Store":
+    def init(cls, root: Path) -> Store:
         root = Path(root).resolve()
         store = cls(root)
         for d in TIER_DIR.values():
@@ -127,9 +128,11 @@ class Store:
         if not self._graph_tried:
             self._graph_tried = True
             try:
-                from .graph import load as load_graph
+                from .graph import GraphMissing, load as load_graph
                 self._graph_cache = load_graph(self.root)
-            except Exception:
+            except (GraphMissing, OSError, json.JSONDecodeError, KeyError, ValueError):
+                # A project may have no graph, or a corrupt one. Neither is a
+                # reason for the memory engine to stop working.
                 self._graph_cache = None
         return self._graph_cache
 
@@ -154,6 +157,17 @@ class Store:
             return []
         kind, ids = g.resolve(path)
         return ids if kind == "file" else []
+
+    def anchor_digest(self, rec: Record) -> str:
+        """Digest of the file a record was verified against, at the time of writing."""
+        path = self.source_path(rec.source)
+        if not path:
+            return ""
+        f = self.root / path
+        try:
+            return hashlib.sha256(f.read_bytes()).hexdigest()[:16]
+        except OSError:
+            return ""
 
     def ref_files(self, rec: Record) -> list[str]:
         """Every file this record is anchored to: its source, plus the files of
@@ -209,6 +223,8 @@ class Store:
 
         if not rec.graph_refs:
             rec.graph_refs = self.resolve_graph_refs(rec)
+        if rec.confidence == "verified" and not rec.anchor_hash:
+            rec.anchor_hash = self.anchor_digest(rec)
 
         existing = self.find_live(rec.name, rec.type)
         action = "created"
@@ -238,12 +254,12 @@ class Store:
         self.db.execute(
             """INSERT INTO records (id,name,type,confidence,source,created_at,verified_at,
                    supersedes,superseded_by,graph_refs,tags,path,hash,ref_files,
-                   consolidated_into)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   consolidated_into,anchor_hash)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (rec.id, rec.name, rec.type, rec.confidence, rec.source, rec.created_at,
              rec.verified_at, rec.supersedes, rec.superseded_by,
              json.dumps(d["graph_refs"]), json.dumps(d["tags"]), str(path), rec.hash,
-             json.dumps(self.ref_files(rec)), rec.consolidated_into),
+             json.dumps(self.ref_files(rec)), rec.consolidated_into, rec.anchor_hash),
         )
         self.db.execute(
             "INSERT INTO records_fts (id,name,body,tags,source) VALUES (?,?,?,?,?)",
@@ -288,12 +304,23 @@ class Store:
             files = json.loads(row.get("ref_files") or "[]")
         except json.JSONDecodeError:
             return None
+        anchor = row.get("anchor_hash") or ""
         for rel in files:
             p = self.root / rel
             if not p.exists():
                 return f"{rel} no longer exists (verified {stamp})"
-            if p.stat().st_mtime > verified_ts:
-                return f"{rel} changed after this was verified ({stamp})"
+            if anchor:
+                # Content, not mtime. A rebuild, a checkout or a formatter run
+                # touches a file without changing it, and a staleness warning
+                # that fires on those gets ignored like any other false alarm.
+                try:
+                    current = hashlib.sha256(p.read_bytes()).hexdigest()[:16]
+                except OSError:
+                    continue
+                if current != anchor:
+                    return f"{rel} changed after this was verified ({stamp})"
+            elif p.stat().st_mtime > verified_ts:
+                return f"{rel} changed after this was verified ({stamp}, mtime only)"
         return None
 
     def stale_records(self) -> list[dict]:

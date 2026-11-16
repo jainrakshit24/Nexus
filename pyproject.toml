@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nexus-eims"
-version = "1.1.0"
+version = "1.2.0"
 description = "Engineering Intelligence & Memory System"
 requires-python = ">=3.10"
 dependencies = ["PyYAML>=6.0", "tiktoken>=0.7"]
@@ -12,6 +12,26 @@ license = { text = "MIT" }
 
 [project.scripts]
 nexus = "nexus.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# Correctness and clarity, not style policing. A linter that fires on taste
+# gets switched off, and a switched-off linter protects nothing.
+select = ["E", "F", "W", "B", "UP", "C4", "SIM", "RET", "ARG", "PTH"]
+ignore = [
+    "E501",    # line length is handled by the formatter, not an error
+    "SIM105",  # contextlib.suppress is not clearer than try/except: pass here
+    "RET504",  # a named return value is often the documentation
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG", "B011"]
 
 [tool.setuptools.packages.find]
 include = ["nexus*"]

@@ -149,6 +149,15 @@ traversal and the text pass is the fallback rather than the path.
 uniform than real source. Treat these as a floor. Graph build time is not included
 because NEXUS does not build graphs — `/graphify` does.
 
+## 6b. What these numbers are not
+
+Every benchmark here is **synthetic and self-authored**: the corpora are
+generated, and the same person wrote the questions, the answers and the
+retrieval they score. That is weak evidence by construction. NEXUS has also
+never been run against a real third-party codebase — only against itself and
+against fixtures. Treat these as a floor and a direction, not as a measurement
+of how it behaves on your repository.
+
 ## 7. Test suite
 
 `python3 -m pytest tests -q` — **178 tests, 5.0 s**, across 13 modules.

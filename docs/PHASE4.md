@@ -65,9 +65,12 @@ dated revision rather than an invented one.
 - **Capture records outcomes, not conversation.** The post-tool hook fires only
   on a command that looks like a test run *and* only when the host reported an
   exit code. Without an exit code nothing was learned, so nothing is stored.
-- **Zero-token is structural.** Had the dashboard been merely "not usually
-  called by the agent", it would eventually have been called. It is not
-  importable from the server, and a test keeps it that way.
+- **Zero-token is structural — and it is a claim about the dashboard only.**
+  Had the dashboard been merely "not usually called by the agent", it would
+  eventually have been called. It is not importable from the server, and a test
+  keeps it that way. The SessionStart hook is a separate thing and *does* add
+  tokens, deliberately: a few lines of orientation. Do not read "zero tokens"
+  as a statement about NEXUS as a whole.
 
 ## Known limits
 

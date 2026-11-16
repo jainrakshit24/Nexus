@@ -121,8 +121,7 @@ def test_a_fresh_verified_fact_is_not_stale(joined):
 
 
 def test_editing_the_source_file_makes_the_fact_stale(joined, graph_repo):
-    import os, time
-    os.utime(graph_repo / "a.py", (time.time() + 120, time.time() + 120))
+    (graph_repo / "a.py").write_text("def alpha():\n    return 'now a string'\n")
     hit = joined.recall("earliest helper whole number")[0]
     assert hit["stale"] and "changed after this was verified" in hit["stale"]
 
@@ -133,11 +132,7 @@ def test_deleting_the_source_file_makes_the_fact_stale(joined, graph_repo):
 
 
 def test_re_verifying_clears_the_staleness(joined, graph_repo):
-    import os, time
-    # A real edit lands at "now", not in the future. A future mtime can never be
-    # cleared by re-verifying, which is correct but makes a poor fixture.
-    now = time.time()
-    os.utime(graph_repo / "a.py", (now, now))
+    (graph_repo / "a.py").write_text("def alpha():\n    return 2\n")
     assert joined.recall("earliest helper whole number")[0]["stale"]
 
     joined.write(Record(name="first-routine-contract", type="project",
@@ -147,17 +142,15 @@ def test_re_verifying_clears_the_staleness(joined, graph_repo):
 
 
 def test_observed_and_assumed_facts_never_claim_currency(joined, graph_repo):
-    import os, time
     joined.write(Record(name="a-guess", type="project", body="Probably two retries.",
                         confidence="assumed", source="a.py:1"))
-    os.utime(graph_repo / "a.py", (time.time() + 120, time.time() + 120))
+    (graph_repo / "a.py").write_text("def alpha():\n    return 3\n")
     hit = next(r for r in joined.recall("probably two retries") if r["name"] == "a-guess")
     assert hit["stale"] is None
 
 
 def test_status_counts_stale_facts_and_names_them(joined, graph_repo):
-    import os, time
-    os.utime(graph_repo / "a.py", (time.time() + 120, time.time() + 120))
+    (graph_repo / "a.py").write_text("def alpha():\n    return 4\n")
     stats = joined.stats()
     assert stats["stale"] == 1
     assert stats["stale_records"][0]["name"] == "first-routine-contract"
@@ -175,3 +168,27 @@ def test_verified_at_is_precise_to_the_second(joined):
     afternoon', so same-day edits would be missed."""
     row = joined.get("first-routine-contract")
     assert "T" in row["verified_at"], row["verified_at"]
+
+
+def test_touching_a_file_without_changing_it_is_not_stale(joined, graph_repo):
+    """A checkout, a rebuild or a formatter run moves mtime without changing
+    content. A staleness warning that fires on those is noise, and noise is
+    the failure mode that gets a check switched off."""
+    import os
+    import time
+    future = time.time() + 300
+    os.utime(graph_repo / "a.py", (future, future))
+    assert joined.recall("earliest helper whole number")[0]["stale"] is None
+
+
+def test_staleness_falls_back_to_mtime_for_a_record_with_no_anchor(joined, graph_repo):
+    """Records written before anchor hashes existed must still be checkable."""
+    import os
+    import time
+    row = joined.get("first-routine-contract")
+    joined.db.execute("UPDATE records SET anchor_hash='' WHERE id=?", (row["id"],))
+    joined.db.commit()
+    future = time.time() + 300
+    os.utime(graph_repo / "a.py", (future, future))
+    why = joined.record_staleness(dict(joined.get("first-routine-contract")))
+    assert why and "mtime only" in why

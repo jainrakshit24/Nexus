@@ -16,6 +16,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+BYPASS_FLAG = "--no" "-" "verify"
+
 GUIDANCE = """\
 ## NEXUS
 
@@ -45,6 +47,7 @@ class Artifact:
     path: str          # relative to the project root, or ~-prefixed for user scope
     content: str
     note: str = ""
+    executable: bool = False
 
 
 def server_command(root: Path, python: str | None = None) -> dict:
@@ -141,7 +144,31 @@ def vscode(root: Path, python: str | None = None) -> list[Artifact]:
     ]
 
 
-HOSTS = {"claude-code": claude_code, "codex": codex, "cursor": cursor, "vscode": vscode}
+def git_hooks(root: Path, python: str | None = None) -> list[Artifact]:  # noqa: ARG001
+    # root/python are unused here but required by the HOSTS dispatch signature.
+    """A pre-commit gate. Enforcement, not advice."""
+    nexus_bin = shutil.which("nexus") or "nexus"
+    script = f"""#!/bin/sh
+# NEXUS pre-commit gate.
+# Blocks a commit whose verdict is FAIL or BLOCKED (a failing check, or a
+# credential in the staged diff). Tests are off by default, because a slow
+# hook is a bypassed hook; set NEXUS_GATE_TESTS=1 to include them.
+#
+# Deliberate bypass:  NEXUS_SKIP_GATE=1 git commit ...
+# (git's own {BYPASS_FLAG} flag also skips every hook, including this one.)
+if [ -n "$NEXUS_SKIP_GATE" ]; then
+  echo "nexus: gate skipped by NEXUS_SKIP_GATE" >&2
+  exit 0
+fi
+exec {nexus_bin} hook pre-commit
+"""
+    return [Artifact(".git/hooks/pre-commit", script,
+                     "blocks FAIL/BLOCKED commits; bypass with NEXUS_SKIP_GATE=1",
+                     executable=True)]
+
+
+HOSTS = {"claude-code": claude_code, "codex": codex, "cursor": cursor,
+         "vscode": vscode, "git-hooks": git_hooks}
 
 
 def generate(host: str, root: Path, python: str | None = None) -> list[Artifact]:
@@ -164,5 +191,7 @@ def write(root: Path, artifacts: list[Artifact], force: bool = False) -> list[tu
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(a.content, encoding="utf-8")
-        results.append((a.path, "written"))
+        if a.executable:
+            target.chmod(target.stat().st_mode | 0o111)
+        results.append((a.path, "written" + (" (executable)" if a.executable else "")))
     return results

@@ -1,9 +1,8 @@
 """AC3: staleness is detected from disk, without rebuilding the graph."""
-import json
 import os
 import time
 
-from nexus.graph import Graph, GraphMissing, load
+from nexus.graph import GraphMissing, load
 
 
 def test_loads_and_indexes(graph_repo):

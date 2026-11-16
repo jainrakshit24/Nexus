@@ -1,5 +1,4 @@
 """The MCP stdio client, against a fake server. No network, no uvx."""
-import json
 import sys
 import textwrap
 
@@ -49,15 +48,14 @@ def test_initialize_list_and_call(server_cmd):
 
 
 def test_server_error_result_raises(server_cmd):
-    with MCPClient(server_cmd, timeout=10) as c:
-        with pytest.raises(MCPError):
-            c.call("echo", {"boom": True})
+    with MCPClient(server_cmd, timeout=10) as c, pytest.raises(MCPError):
+        c.call("echo", {"boom": True})
 
 
 def test_unknown_method_raises_with_the_server_message(server_cmd):
-    with MCPClient(server_cmd, timeout=10) as c:
-        with pytest.raises(MCPError, match="no such method"):
-            c.request("does/not/exist")
+    with MCPClient(server_cmd, timeout=10) as c, \
+            pytest.raises(MCPError, match="no such method"):
+        c.request("does/not/exist")
 
 
 def test_ids_are_matched_so_responses_do_not_cross(server_cmd):

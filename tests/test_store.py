@@ -40,7 +40,8 @@ def test_reindex_reproduces_identical_recall(store: Store):
 
 
 def test_identical_rewrite_is_a_noop(store: Store):
-    args = dict(name="stack", type="project", body="The API is FastAPI.", confidence="observed")
+    args = {"name": "stack", "type": "project", "body": "The API is FastAPI.",
+            "confidence": "observed"}
     assert store.write(Record(**args))[0] == "created"
     assert store.write(Record(**args))[0] == "unchanged"
     assert store.stats()["live"] == 1

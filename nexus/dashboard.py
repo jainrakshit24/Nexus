@@ -9,13 +9,15 @@ Local only: the server binds to 127.0.0.1 and nothing is published anywhere.
 """
 from __future__ import annotations
 
-import html
 import json
+import sqlite3
 import subprocess
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+from datetime import datetime, timezone
 
 from . import gate as gate_mod, tokens as tokens_mod
 from .graph import GraphMissing, load as load_graph
@@ -28,7 +30,7 @@ def state(root: Path) -> dict:
 
     try:
         stats = store.stats()
-    except Exception as e:
+    except (sqlite3.Error, OSError, json.JSONDecodeError) as e:
         stats = {"live": 0, "superseded": 0, "stale": 0, "stale_records": [],
                  "by_type": {}, "error": str(e)}
 
@@ -42,7 +44,7 @@ def state(root: Path) -> dict:
                  "deleted": s.deleted[:10]}
     except GraphMissing as e:
         graph["detail"] = str(e).split(".")[0]
-    except Exception as e:
+    except (OSError, json.JSONDecodeError, KeyError, ValueError) as e:
         graph["detail"] = f"unreadable: {e}"
 
     plan = gate_mod.load_latest_plan(root)
@@ -58,12 +60,76 @@ def state(root: Path) -> dict:
         commit = head.stdout.strip() if head.returncode == 0 else ""
         dirty = subprocess.run(["git", "status", "--porcelain"], cwd=root,
                                capture_output=True, text=True, timeout=10)
-        dirty_count = len([l for l in dirty.stdout.splitlines() if l.strip()])
+        dirty_count = len([ln for ln in dirty.stdout.splitlines() if ln.strip()])
     except (OSError, subprocess.SubprocessError):
         commit, dirty_count = "", 0
 
     return {"root": str(root), "memory": stats, "graph": graph, "task": task,
             "tokens": tokens_mod.totals(root), "git": {"head": commit, "dirty": dirty_count}}
+
+
+HISTORY_FILE = "history.jsonl"
+MIN_INTERVAL_S = 60
+
+
+def history_path(root: Path) -> Path:
+    return Path(root) / ".nexus" / HISTORY_FILE
+
+
+def record_state(root: Path, s: dict, min_interval_s: int = MIN_INTERVAL_S) -> bool:
+    """Append a snapshot, at most once a minute. Returns whether it wrote."""
+    p = history_path(root)
+    row = {
+        "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "memory": s["memory"].get("live", 0),
+        "stale": s["memory"].get("stale", 0),
+        "graph_nodes": s["graph"].get("nodes", 0),
+        "graph_fresh": bool(s["graph"].get("fresh")),
+        "saved": s["tokens"].get("saved_estimated", 0),
+        "dirty": s["git"].get("dirty", 0),
+    }
+    rows = history(root, limit=1)
+    if rows:
+        try:
+            last = datetime.fromisoformat(rows[-1]["at"])
+            if (datetime.now(timezone.utc) - last).total_seconds() < min_interval_s:
+                return False
+        except (ValueError, KeyError):
+            pass
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with p.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row) + "\n")
+    return True
+
+
+def history(root: Path, limit: int = 60) -> list[dict]:
+    p = history_path(root)
+    if not p.exists():
+        return []
+    out = []
+    for line in p.read_text(encoding="utf-8", errors="replace").splitlines()[-limit:]:
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return out
+
+
+def trend(root: Path, limit: int = 60) -> dict:
+    """What has moved since the first recorded snapshot. Empty until there are two."""
+    rows = history(root, limit)
+    if len(rows) < 2:
+        return {"points": len(rows), "note": "not enough history yet"}
+    first, last = rows[0], rows[-1]
+    return {
+        "points": len(rows), "from": first["at"], "to": last["at"],
+        "memory": last["memory"] - first["memory"],
+        "stale": last["stale"] - first["stale"],
+        "saved": last["saved"] - first["saved"],
+        "graph_nodes": last["graph_nodes"] - first["graph_nodes"],
+        "series": [{"at": r["at"], "memory": r["memory"], "stale": r["stale"],
+                    "saved": r["saved"]} for r in rows],
+    }
 
 
 def compact_line(s: dict) -> str:
@@ -145,6 +211,18 @@ function render(s){
   if (stale.length) rows.push(`<div class="card full"><div class="k">Graph drift</div>
     <ul>${stale.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
     <div class="sub">rebuild with <code>/graphify . --update</code> in your agent</div></div>`);
+  const tr = s.trend || {};
+  if ((tr.series||[]).length > 1) {
+    const pts = tr.series, max = Math.max(1, ...pts.map(p=>p.memory));
+    const bars = pts.slice(-40).map(p=>{
+      const h = Math.round(100 * p.memory / max);
+      return `<div title="${esc(p.at)}: ${p.memory} records, ${p.stale} stale" style="flex:1;min-width:3px;height:${Math.max(3,h)}%;background:var(--accent);opacity:${p.stale? .45 : .9}"></div>`;
+    }).join('');
+    const d = (n)=> (n>0?'+':'') + n;
+    rows.push(`<div class="card full"><div class="k">Trend — ${esc(tr.points)} snapshot(s)</div>
+      <div style="display:flex;align-items:flex-end;gap:2px;height:60px;margin:8px 0">${bars}</div>
+      <div class="sub">memory ${esc(d(tr.memory))} · stale ${esc(d(tr.stale))} · saved ${esc(d(tr.saved))} tokens · graph ${esc(d(tr.graph_nodes))} nodes<br>faded bars are snapshots with stale facts</div></div>`);
+  }
   if ((m.stale_records||[]).length) rows.push(`<div class="card full"><div class="k">Facts whose ground has moved</div>
     <ul>${m.stale_records.map(r=>`<li>${esc(r.name)} — ${esc(r.why)}</li>`).join('')}</ul>
     <div class="sub">re-verify with <code>nexus remember</code> once you have checked them</div></div>`);
@@ -175,7 +253,10 @@ def _handler(root: Path):
 
         def do_GET(self):
             if self.path.startswith("/api/state"):
-                self._send(json.dumps(state(root)).encode(), "application/json")
+                s = state(root)
+                record_state(root, s)
+                s["trend"] = trend(root)
+                self._send(json.dumps(s).encode(), "application/json")
             elif self.path in ("/", "/index.html"):
                 self._send(PAGE.encode(), "text/html; charset=utf-8")
             else:

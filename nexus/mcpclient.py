@@ -31,7 +31,7 @@ class MCPClient:
 
     # ---------- lifecycle ----------
 
-    def __enter__(self) -> "MCPClient":
+    def __enter__(self) -> MCPClient:
         self.start()
         return self
 

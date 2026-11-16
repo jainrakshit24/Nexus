@@ -40,7 +40,7 @@ def main() -> int:
     store = build_store(tmp)
 
     ks = (1, 3, 5, 10)
-    hits = {k: 0 for k in ks}
+    hits = dict.fromkeys(ks, 0)
     latencies: list[float] = []
     misses: list[tuple[str, str, list[str]]] = []
 

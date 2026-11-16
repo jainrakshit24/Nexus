@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from .symbols import SKIP_DIRS, iter_text_files
+from .symbols import iter_text_files
 
 PLACEHOLDER = "<set-me>"
 
@@ -133,5 +133,5 @@ def gitignore_protects_env(root: Path) -> bool:
     f = Path(root) / ".gitignore"
     if not f.is_file():
         return False
-    lines = {l.strip() for l in f.read_text(encoding="utf-8", errors="replace").splitlines()}
+    lines = {line.strip() for line in f.read_text(encoding="utf-8", errors="replace").splitlines()}
     return bool(lines & {".env", ".env*", "*.env", ".env.local"})

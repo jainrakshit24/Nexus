@@ -23,10 +23,40 @@ DATA_PATHS = re.compile(r"(migration|schema|\.sql$|models?\.py|repository|dao)",
 ARCHITECT_BLAST_THRESHOLD = 5
 
 
+BRIEFS = {
+    "developer": "Follow the conventions already in the files you touch. Reuse what "
+                 "exists before adding anything. Keep the change as small as the task allows.",
+    "architect": "Compare this against the existing architecture before accepting it. "
+                 "If it introduces a new pattern, say why the existing one does not fit, "
+                 "and record it as an ADR.",
+    "data": "Check the migration is reversible or deliberately not, that it is safe on a "
+            "non-empty table, and that old and new code can both run during the deploy.",
+    "security": "Check authentication and authorisation on every path this touches, "
+                "validate input at the boundary, and confirm no secret is read from or "
+                "written to the repository.",
+    "devops": "Confirm the build still produces the same artefact, the deployment is "
+              "reversible with one command, and no environment variable was added "
+              "without a placeholder in .env.example.",
+    "qa": "Name the edge cases before reading the implementation. Check the dependents "
+          "listed in this plan actually still work, and that a test fails without the fix.",
+    "tpm": "Confirm the scope matches what was asked, the acceptance criteria are "
+           "testable, and anything deferred is written down rather than forgotten.",
+}
+
+
 @dataclass(frozen=True)
 class Role:
     name: str
     why: str
+
+    @property
+    def brief(self) -> str:
+        """What this role must actually do on this change.
+
+        NEXUS cannot spawn a host's subagents, so it does the next honest thing:
+        it says precisely what the role is responsible for, in the plan the
+        agent is already reading."""
+        return BRIEFS.get(self.name, "")
 
 
 def route(targets: list[str], blast_radius: int, has_tests: bool,

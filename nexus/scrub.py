@@ -57,7 +57,7 @@ class SecretFound(Exception):
         super().__init__(f"refusing to store: matched {names}")
 
 
-def _excerpt(text: str, match: re.Match) -> str:
+def _excerpt(match: re.Match) -> str:
     """Show enough to identify the line, never the whole secret."""
     raw = match.group(0)
     head = raw[:6]
@@ -68,10 +68,10 @@ def scan(text: str) -> list[Finding]:
     findings: list[Finding] = []
     for name, rx in _SECRETS:
         for m in rx.finditer(text):
-            findings.append(Finding(name, "secret", _excerpt(text, m)))
+            findings.append(Finding(name, "secret", _excerpt(m)))
     for name, rx in _WARNS:
         for m in rx.finditer(text):
-            findings.append(Finding(name, "warning", _excerpt(text, m)))
+            findings.append(Finding(name, "warning", _excerpt(m)))
     return findings
 
 

@@ -15,8 +15,7 @@ import re
 import sys
 from pathlib import Path
 
-from . import discover
-from .graph import GraphMissing, load as load_graph
+from .graph import load as load_graph
 from .record import Record
 from .store import NotInitialized, Store, find_root
 
@@ -40,7 +39,7 @@ def _root(explicit: str | None = None) -> Path | None:
         return None
 
 
-def session_start(payload: dict, root_hint: str | None = None) -> str:
+def session_start(payload: dict, root_hint: str | None = None) -> str:  # noqa: ARG001
     """A short orientation block. Deliberately small — it costs context."""
     root = _root(root_hint)
     if root is None:
@@ -106,11 +105,57 @@ def post_tool(payload: dict, root_hint: str | None = None) -> str:
     return ""
 
 
+def pre_commit(payload: dict, root_hint: str | None = None) -> int:  # noqa: ARG001
+    """Block a commit whose gate verdict is FAIL or BLOCKED. Returns an exit code.
+
+    Deliberately does **not** run the test suite by default: a pre-commit hook
+    that takes minutes is a pre-commit hook everybody bypasses, and a bypassed
+    gate protects nothing. Set NEXUS_GATE_TESTS=1 to include them.
+    """
+    import os
+    from . import gate as gate_mod
+
+    root = _root(root_hint)
+    if root is None:
+        return 0                       # not a NEXUS project: not our business
+
+    run_tests = os.environ.get("NEXUS_GATE_TESTS") == "1"
+    try:
+        verdict = gate_mod.post_edit(root, run=run_tests, staged=True)
+    except Exception as e:
+        print(f"nexus: gate could not run ({e}); allowing the commit", file=sys.stderr)
+        return 0                       # a broken gate must not wedge the repo
+
+    if verdict.status in ("BLOCKED", "FAIL"):
+        print(verdict.render(), file=sys.stderr)
+        print("\nnexus: commit blocked. Fix the above, or bypass deliberately with "
+              "NEXUS_SKIP_GATE=1 before the commit command.", file=sys.stderr)
+        return 1
+
+    if verdict.breaking:
+        print(f"nexus: {len(verdict.breaking)} breaking API change(s) in this commit — "
+              f"allowed, but review them:", file=sys.stderr)
+        for b in verdict.breaking:
+            print(f"  {b['symbol']}: {b['change']}", file=sys.stderr)
+    if not verdict.tests.ran:
+        print("nexus: tests were not run by this hook (set NEXUS_GATE_TESTS=1 to include them)",
+              file=sys.stderr)
+    return 0
+
+
 HANDLERS = {"session-start": session_start, "post-tool": post_tool}
+GATE_HOOKS = {"pre-commit": pre_commit}
 
 
 def run(name: str, stream=None, root_hint: str | None = None) -> int:
-    """Entry point. Always exits 0 — a hook that fails must not stop the agent."""
+    """Entry point.
+
+    Context hooks always exit 0 — a hook that fails must not stop the agent.
+    Gate hooks are the exception: blocking is the entire point of one.
+    """
+    if name in GATE_HOOKS:
+        return GATE_HOOKS[name]({}, root_hint)
+
     handler = HANDLERS.get(name)
     if handler is None:
         return 0

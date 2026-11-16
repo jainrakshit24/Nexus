@@ -75,7 +75,6 @@ def test_a_second_pass_finds_nothing_to_do(episodic):
 def test_a_summary_is_never_folded_into_another_summary(episodic):
     episodic.consolidate_episodes(older_than_days=30)
     # Age the summary itself, then run again.
-    from pathlib import Path
     from nexus.record import read as read_record
     old = (date.today() - timedelta(days=200)).isoformat()
     for p in (episodic.dir / "episodes").rglob("episodes-*.md"):

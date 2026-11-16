@@ -40,7 +40,7 @@ class Serena:
         self.client = MCPClient(self.command, cwd=self.project, timeout=timeout)
         self.session: str | None = None
 
-    def __enter__(self) -> "Serena":
+    def __enter__(self) -> Serena:
         self.client.start()
         instructions = MCPClient.text_of(self.client.call("initial_instructions", {}))
         m = SESSION_RE.search(instructions)

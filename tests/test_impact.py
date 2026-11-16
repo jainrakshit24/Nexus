@@ -52,7 +52,8 @@ def test_risky_path_forces_the_full_workflow(graph_repo):
 
 
 def test_a_stale_graph_forces_the_full_workflow(graph_repo):
-    import os, time
+    import os
+    import time
     os.utime(graph_repo / "b.py", (time.time() + 60, time.time() + 60))
     imp = analyze(graph_repo, "a.py")
     assert imp.gear == "full" and "stale" in imp.reason()

@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 import time
@@ -94,7 +93,7 @@ def main() -> int:
     timed("writing 200 memory records", seed)
     timed("first recall (warm index)", lambda: store.recall("payload retries"))
 
-    target = f"src/pkg000/mod50.py"
+    target = "src/pkg000/mod50.py"
     timed("symbol outline of one module", lambda: symbols.outline(root / target))
     (_, impact_s) = timed(f"impact on {target} (no graph: text over {real_files:,} files)",
                           lambda: analyze(root, target, use_graph=False))

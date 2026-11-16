@@ -43,7 +43,7 @@ def git_info(root: Path) -> dict:
         "repo": True,
         "branch": _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], root) or "unknown",
         "head": _run(["git", "rev-parse", "--short", "HEAD"], root) or "unknown",
-        "dirty_files": len([l for l in status.splitlines() if l.strip()]),
+        "dirty_files": len([ln for ln in status.splitlines() if ln.strip()]),
     }
 
 
@@ -54,6 +54,9 @@ def _makefile_has_test(root: Path) -> bool:
 
 EXT_STACK = {".py": "python", ".ts": "node", ".tsx": "node", ".js": "node",
              ".go": "go", ".rs": "rust", ".java": "java", ".rb": "ruby", ".php": "php"}
+
+
+SAFE_PATH = re.compile(r"^[A-Za-z0-9._/-]+$")
 
 
 def _nested_pytest_target(root: Path, max_depth: int = 3) -> str:
@@ -67,7 +70,12 @@ def _nested_pytest_target(root: Path, max_depth: int = 3) -> str:
             continue
         if best is None or depth < best[0]:
             best = (depth, d)
-    return str(best[1].relative_to(root)) if best else ""
+    if best is None:
+        return ""
+    rel = str(best[1].relative_to(root))
+    # A path is repository-controlled input. If it carries anything a shell
+    # could interpret, do not put it in a command at all.
+    return rel if SAFE_PATH.match(rel) else ""
 
 
 def test_command(root: Path, stack: str) -> str:

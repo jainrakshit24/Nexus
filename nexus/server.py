@@ -12,11 +12,11 @@ import json
 import sys
 import traceback
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 from . import context as context_mod
 from . import gate as gate_mod
-from . import graph as graph_mod
 from . import scrub, tokens as tokens_mod
 from .impact import analyze
 from .record import CONFIDENCE, TIERS, Record

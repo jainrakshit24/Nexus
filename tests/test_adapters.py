@@ -1,6 +1,5 @@
 """Host adapters, hooks, and the dashboard's separation from the agent."""
 import json
-import sys
 from pathlib import Path
 
 import pytest
@@ -12,12 +11,36 @@ from nexus.store import Store
 
 # ---------- adapters ----------
 
-def test_every_host_produces_a_launchable_server_command(tmp_path):
-    for host in adapters.HOSTS:
+MCP_HOSTS = ("claude-code", "codex", "cursor", "vscode")
+
+
+def test_every_mcp_host_produces_a_launchable_server_command(tmp_path):
+    for host in MCP_HOSTS:
         arts = adapters.generate(host, tmp_path)
         blob = "\n".join(a.content for a in arts)
         assert "nexus.server" in blob, host
         assert str(tmp_path.resolve()) in blob, host
+
+
+def test_git_hooks_is_a_commit_gate_not_an_mcp_client(tmp_path):
+    arts = adapters.generate("git-hooks", tmp_path)
+    assert [a.path for a in arts] == [".git/hooks/pre-commit"]
+    assert "nexus.server" not in arts[0].content
+    assert "hook pre-commit" in arts[0].content
+    assert arts[0].executable
+
+
+def test_the_commit_gate_documents_its_bypass(tmp_path):
+    script = adapters.generate("git-hooks", tmp_path)[0].content
+    assert "NEXUS_SKIP_GATE" in script
+    assert script.startswith("#!/bin/sh")
+
+
+def test_the_commit_gate_is_written_executable(tmp_path):
+    (tmp_path / ".git" / "hooks").mkdir(parents=True)
+    adapters.write(tmp_path, adapters.generate("git-hooks", tmp_path))
+    hook = tmp_path / ".git" / "hooks" / "pre-commit"
+    assert hook.exists() and hook.stat().st_mode & 0o111
 
 
 def test_mcp_json_files_are_valid_json(tmp_path):

@@ -55,6 +55,7 @@ class Record:
     supersedes: str = ""
     superseded_by: str = ""
     consolidated_into: str = ""  # folded into a summary; kept on disk, out of recall
+    anchor_hash: str = ""        # digest of the source file when this was verified
     graph_refs: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
 
@@ -109,5 +110,5 @@ def parse(text: str) -> Record:
 def read(path: Path) -> Record:
     try:
         return parse(path.read_text(encoding="utf-8"))
-    except Exception as e:
+    except (OSError, UnicodeDecodeError, ValueError, yaml.YAMLError, TypeError) as e:
         raise ValueError(f"{path}: {e}") from e

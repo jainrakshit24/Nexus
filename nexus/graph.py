@@ -121,10 +121,14 @@ class Graph:
         for c in candidates:
             if c in self.by_file:
                 return "file", list(self.by_file[c])
-        # Suffix match: "store.py" should find "nexus/store.py".
-        suffix_hits = [f for f in self.by_file if f.endswith("/" + target) or f == target]
+        # Suffix match: "store.py" should find "nexus/store.py". But a monorepo
+        # has many `utils.py`, and silently merging them produces dependents that
+        # belong to a different module. Say so instead.
+        suffix_hits = sorted(f for f in self.by_file if f.endswith("/" + target) or f == target)
+        if len(suffix_hits) > 1:
+            return "ambiguous", suffix_hits
         if suffix_hits:
-            return "file", [nid for f in suffix_hits for nid in self.by_file[f]]
+            return "file", list(self.by_file[suffix_hits[0]])
 
         label = target.lower()
         sym_hits = [nid for nid, n in self.nodes.items()

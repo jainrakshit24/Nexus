@@ -4,7 +4,6 @@ AC1 lives here: the same `.nexus/` directory, reached through two
 independently configured host launches, returns byte-identical answers.
 """
 import json
-import subprocess
 import sys
 
 import pytest
@@ -64,9 +63,8 @@ def test_every_tool_declares_a_schema_with_required_fields(served):
 
 def test_an_unknown_tool_is_a_protocol_error_not_a_crash(served):
     from nexus.mcpclient import MCPError
-    with launch(served) as c:
-        with pytest.raises(MCPError, match="unknown tool"):
-            c.call("nexus_nope", {})
+    with launch(served) as c, pytest.raises(MCPError, match="unknown tool"):
+        c.call("nexus_nope", {})
 
 
 def test_notifications_get_no_reply():

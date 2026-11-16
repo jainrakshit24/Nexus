@@ -133,5 +133,5 @@ def outline(path: Path, max_lines: int = 120) -> str:
 
     decl = re.compile(r"^\s*(export\s+)?(async\s+)?(function|class|def|type|interface|struct|"
                       r"impl|fn|func|const|var|let|CREATE TABLE|CREATE INDEX)\b", re.I)
-    lines = [f"L{i}: {l.strip()}" for i, l in enumerate(text.splitlines(), 1) if decl.match(l)]
+    lines = [f"L{i}: {ln.strip()}" for i, ln in enumerate(text.splitlines(), 1) if decl.match(ln)]
     return "\n".join(lines[:max_lines])

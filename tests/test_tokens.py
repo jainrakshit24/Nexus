@@ -1,5 +1,4 @@
 """AC4: three numbers, separately labelled; only `saved` may say estimated."""
-import json
 
 from nexus import tokens
 
@@ -14,12 +13,12 @@ def test_three_numbers_are_reported_separately():
     lines = tokens.Accounting(task="t", actual=100, baseline=900).lines()
     joined = "\n".join(lines)
     assert "actual" in joined and "baseline" in joined and "saved" in joined
-    assert len([l for l in lines if "tokens" in l]) == 3
+    assert len([line for line in lines if "tokens" in line]) == 3
 
 
 def test_only_saved_is_labelled_estimated():
     lines = tokens.Accounting(task="t", actual=100, baseline=900).lines()
-    by_name = {l.split()[0]: l for l in lines}
+    by_name = {line.split()[0]: line for line in lines}
     assert "estimated" in by_name["saved"]
     assert "estimated" not in by_name["actual"]
     assert "estimated" not in by_name["baseline"]

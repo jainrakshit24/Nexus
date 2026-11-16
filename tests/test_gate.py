@@ -5,7 +5,7 @@ import sys
 import pytest
 
 from nexus import gate
-from nexus.gate import TestRun, post_edit, pre_edit, revert_unintended
+from nexus.gate import TestRun, find_adr, post_edit, pre_edit, revert_unintended
 from nexus.record import Record
 from nexus.store import Store
 
@@ -156,7 +156,7 @@ def test_the_plan_carries_relevant_memory(git_repo):
     Store(git_repo).write(Record(name="alpha-contract", type="project",
                                  body="alpha must keep returning an int.",
                                  confidence="verified", source="a.py:1"))
-    assert any("alpha-contract" == m["name"] for m in pre_edit(git_repo, ["a.py"]).memories)
+    assert any(m["name"] == "alpha-contract" for m in pre_edit(git_repo, ["a.py"]).memories)
 
 
 def test_a_plan_round_trips_through_disk(git_repo):
@@ -232,3 +232,109 @@ def test_allowlist_comments_and_blank_lines_are_ignored(git_repo):
     (git_repo / ".nexus" / "secret-allowlist").write_text(
         "# a comment\n\naws-access-key-id tests/*   # trailing\n")
     assert gate.load_allowlist(git_repo) == [("aws-access-key-id", "tests/*")]
+
+
+# ---------- Phase 6 ACs ----------
+
+def test_a_removed_public_function_is_reported_with_its_callers(git_repo):
+    """AC2: breaking changes name who feels them."""
+    (git_repo / "a.py").write_text("def alpha():\n    return 1\n\ndef extra():\n    return 2\n")
+    (git_repo / "b.py").write_text("from a import alpha, extra\n\ndef beta():\n    return alpha() + extra()\n")
+    subprocess.run(["git", "add", "-A"], cwd=git_repo, capture_output=True)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-qm", "add extra"], cwd=git_repo, capture_output=True)
+
+    (git_repo / "a.py").write_text("def alpha():\n    return 1\n")      # extra removed
+    verdict = post_edit(git_repo, run=False, run_checks=False)
+    broken = [b for b in verdict.breaking if b["symbol"] == "extra"]
+    assert broken and broken[0]["change"] == "removed"
+    assert "b.py" in (broken[0].get("callers") or []) or "callers" in broken[0]
+    assert "Breaking API changes" in verdict.render()
+
+
+def test_an_untouched_caller_is_called_out(git_repo):
+    (git_repo / "a.py").write_text("def alpha():\n    return 1\n\ndef extra():\n    return 2\n")
+    subprocess.run(["git", "add", "-A"], cwd=git_repo, capture_output=True)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-qm", "base2"], cwd=git_repo, capture_output=True)
+    (git_repo / "a.py").write_text("def alpha():\n    return 1\n")
+    verdict = post_edit(git_repo, run=False, run_checks=False)
+    assert verdict.status in ("REVIEW", "UNVERIFIED")
+
+
+def test_adding_an_optional_parameter_is_not_reported_as_breaking(git_repo):
+    (git_repo / "a.py").write_text("def alpha(x=1):\n    return x\n")
+    verdict = post_edit(git_repo, run=False, run_checks=False)
+    assert [b for b in verdict.breaking if b["symbol"] == "alpha"] == []
+
+
+def test_an_adr_mentioning_a_word_does_not_satisfy_a_path(git_repo):
+    """AC5: naming the file is the point of an ADR."""
+    from nexus import adr
+    (git_repo / "store.py").write_text("X = 1\n")
+    adr.create(git_repo, "How we think about the store", index=False,
+               decision="The store is central to the design.")
+    assert find_adr(git_repo, ["store.py"]) is None
+
+
+def test_an_adr_naming_the_file_does_satisfy_it(git_repo):
+    from nexus import adr
+    (git_repo / "store.py").write_text("X = 1\n")
+    adr.create(git_repo, "Rework the store", affects=["store.py"], index=False)
+    assert find_adr(git_repo, ["store.py"]) is not None
+
+
+def test_the_commit_hook_blocks_a_credential(git_repo, monkeypatch):
+    """AC3: enforcement, not advice."""
+    from nexus import hooks
+    (git_repo / "cfg.py").write_text('KEY = "AKIA1234567890ABCDEF"\n')
+    subprocess.run(["git", "add", "cfg.py"], cwd=git_repo, capture_output=True)
+    assert hooks.pre_commit({}, str(git_repo)) == 1
+
+
+def test_the_commit_hook_allows_a_clean_change(git_repo):
+    from nexus import hooks
+    (git_repo / "a.py").write_text("def alpha():\n    return 7\n")
+    subprocess.run(["git", "add", "a.py"], cwd=git_repo, capture_output=True)
+    assert hooks.pre_commit({}, str(git_repo)) == 0
+
+
+def test_the_commit_hook_ignores_unstaged_work(git_repo):
+    from nexus import hooks
+    (git_repo / "scratch.py").write_text('KEY = "AKIA1234567890ABCDEF"\n')   # not staged
+    assert hooks.pre_commit({}, str(git_repo)) == 0
+
+
+def test_the_commit_hook_never_wedges_a_repo_it_cannot_read(tmp_path):
+    from nexus import hooks
+    assert hooks.pre_commit({}, str(tmp_path / "not-a-project")) == 0
+
+
+def test_dead_code_reports_an_added_symbol_nothing_uses(git_repo):
+    (git_repo / "a.py").write_text("def alpha():\n    return 1\n\ndef orphan():\n    return 0\n")
+    verdict = post_edit(git_repo, run=False)
+    assert any(d["symbol"] == "orphan" for d in verdict.dead_code)
+
+
+def test_dead_code_ignores_a_symbol_that_is_used(git_repo):
+    (git_repo / "a.py").write_text("def alpha():\n    return 1\n\ndef helper():\n    return 2\n")
+    (git_repo / "b.py").write_text("from a import alpha, helper\n\ndef beta():\n    return helper()\n")
+    verdict = post_edit(git_repo, run=False)
+    assert not any(d["symbol"] == "helper" for d in verdict.dead_code)
+
+
+def test_destructive_migrations_surface_in_the_verdict(git_repo):
+    d = git_repo / "migrations"
+    d.mkdir()
+    (d / "0001_drop.sql").write_text("DROP TABLE orders;\n")
+    verdict = post_edit(git_repo, run=False, run_checks=False)
+    assert any(x["rule"] == "drop-table" for x in verdict.migrations["destructive"])
+    assert "Migrations" in verdict.render()
+
+
+def test_roles_carry_a_brief_not_just_a_name(git_repo):
+    (git_repo / "auth.py").write_text("def login(): pass\n")
+    plan = pre_edit(git_repo, ["auth.py"])
+    security = [r for r in plan.roles if r["name"] == "security"]
+    assert security and security[0]["brief"]
+    assert security[0]["brief"] in plan.render()

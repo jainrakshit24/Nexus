@@ -9,7 +9,8 @@ from pathlib import Path
 
 from . import context as context_mod
 from . import adapters, adr as adr_mod
-from . import dashboard as dash_mod, hooks as hooks_mod, server as server_mod
+from . import dashboard as dash_mod, hooks as hooks_mod, secrets as secrets_mod
+from . import server as server_mod
 from . import discover, envman, gate as gate_mod, graph as graph_mod, scrub, tokens as tokens_mod
 from .impact import analyze
 from .record import CONFIDENCE, TIERS, Record
@@ -188,21 +189,41 @@ def cmd_status(args) -> int:
 
 def cmd_impact(args) -> int:
     store = _store(args)
-    imp = analyze(store.root, args.target, use_graph=not args.no_graph, depth=args.depth,
-                  use_serena=args.serena)
+    impacts = [analyze(store.root, t, use_graph=not args.no_graph, depth=args.depth,
+                       use_serena=args.serena) for t in args.target]
 
     if args.json:
-        print(json.dumps({
-            "target": imp.target, "blast_radius": imp.blast_radius, "gear": imp.gear,
-            "reason": imp.reason(), "graph_available": imp.graph_available,
-            "staleness": imp.staleness.summary() if imp.staleness else None,
-            "dependents": [{"file": d.file, "strength": d.strength, "hops": d.hops,
-                            "sources": sorted(d.sources), "relations": sorted(d.relations),
-                            "symbols": d.symbols_hit} for d in imp.dependents],
-            "notes": imp.notes,
-        }, indent=2))
+        print(json.dumps([_impact_json(i) for i in impacts], indent=2)
+              if len(impacts) > 1 else json.dumps(_impact_json(impacts[0]), indent=2))
         return 0
 
+    for n, imp in enumerate(impacts):
+        if n:
+            print()
+        _print_impact(imp)
+
+    if len(impacts) > 1:
+        combined = sorted({d.file for i in impacts for d in i.dependents if d.strength != "weak"}
+                          - set(args.target))
+        gear = "full" if any(i.gear == "full" for i in impacts) else "light"
+        print(f"\ncombined: {len(args.target)} target(s), {len(combined)} distinct dependent(s), "
+              f"workflow {gear}")
+    return 0
+
+
+def _impact_json(imp) -> dict:
+    return {
+        "target": imp.target, "blast_radius": imp.blast_radius, "gear": imp.gear,
+        "reason": imp.reason(), "graph_available": imp.graph_available,
+        "staleness": imp.staleness.summary() if imp.staleness else None,
+        "dependents": [{"file": d.file, "strength": d.strength, "hops": d.hops,
+                        "sources": sorted(d.sources), "relations": sorted(d.relations),
+                        "symbols": d.symbols_hit} for d in imp.dependents],
+        "notes": imp.notes,
+    }
+
+
+def _print_impact(imp) -> None:
     print(f"{imp.target}  blast radius {imp.blast_radius} -> workflow: {imp.gear}")
     print(f"  reason: {imp.reason()}")
     print(f"  graph : {imp.staleness.summary() if imp.staleness else 'unavailable'}")
@@ -210,13 +231,12 @@ def cmd_impact(args) -> int:
         print(f"  note  : {n}")
     if not imp.dependents:
         print("  no dependents found")
-        return 0
+        return
     print()
     for d in imp.dependents:
         rel = ", ".join(sorted(d.relations)) or "-"
         hop = f"{d.hops} hop" if d.hops else "text"
         print(f"  [{d.strength:6}] {d.file:<32} {hop:<6} via {','.join(sorted(d.sources)):<16} {rel}")
-    return 0
 
 
 def cmd_context(args) -> int:
@@ -275,6 +295,18 @@ def cmd_graph(args) -> int:
 
 def cmd_plan(args) -> int:
     store = _store(args)
+    if args.list:
+        rows = gate_mod.list_plans(store.root)
+        if not rows:
+            print("no plans recorded yet")
+            return 1
+        for r in rows:
+            print(f"{r['id']}  {r['gear']:<6} {', '.join(r['targets'])}")
+        print("\nverify against one with: nexus verify --plan <id>", file=sys.stderr)
+        return 0
+    if not args.targets:
+        print("give the files you are about to change, or --list", file=sys.stderr)
+        return 2
     plan = gate_mod.pre_edit(store.root, args.targets, depth=args.depth)
     path = gate_mod.save_plan(store.root, plan)
     print(plan.render())
@@ -299,7 +331,9 @@ def _confirm_revert(files: list[str]) -> bool:
 
 def cmd_verify(args) -> int:
     store = _store(args)
-    verdict = gate_mod.post_edit(store.root, test_command=args.test_command, run=not args.no_tests)
+    verdict = gate_mod.post_edit(store.root, test_command=args.test_command,
+                                 run=not args.no_tests, run_checks=not args.no_checks,
+                                 ref=args.ref, plan_id=args.plan, shell=args.shell)
     print(verdict.render())
 
     if args.revert_unintended and verdict.unintended:
@@ -330,6 +364,25 @@ def cmd_adr(args) -> int:
 
 def cmd_env(args) -> int:
     store = _store(args)
+
+    if args.get:
+        value, source = secrets_mod.get(args.get, backend=args.backend, cwd=str(store.root))
+        if value is None:
+            print(f"{args.get}: not found — {source}", file=sys.stderr)
+            return 1
+        # Printed to stdout for the caller to consume, and stored nowhere.
+        print(value)
+        print(f"{args.get} read from {source} (not cached, not recorded)", file=sys.stderr)
+        return 0
+
+    if args.backends:
+        for b in secrets_mod.backends():
+            print(f"  {b.name:<14} {'available' if b.available else 'not installed':<14} {b.note}")
+        if not secrets_mod.available():
+            print("\nno OS secret store found — values must come from the environment",
+                  file=sys.stderr)
+        return 0
+
     rep = envman.report(store.root)
 
     if args.json:
@@ -403,8 +456,20 @@ def cmd_serve(args) -> int:
 
 def cmd_dashboard(args) -> int:
     store = _store(args)
+    if args.trend:
+        t = dash_mod.trend(store.root)
+        if t.get("points", 0) < 2:
+            print(t.get("note", "no history yet"))
+            return 1
+        print(f"{t['points']} snapshot(s), {t['from']} -> {t['to']}")
+        for k in ("memory", "stale", "saved", "graph_nodes"):
+            print(f"  {k:<12} {t[k]:+d}")
+        return 0
+
     if args.compact:
-        print(dash_mod.compact_line(dash_mod.state(store.root)))
+        s = dash_mod.state(store.root)
+        dash_mod.record_state(store.root, s)
+        print(dash_mod.compact_line(s))
         return 0
     if args.json:
         print(json.dumps(dash_mod.state(store.root), indent=2))
@@ -432,7 +497,7 @@ def cmd_install(args) -> int:
         for a in arts:
             if a.path.startswith("~"):
                 print(f"\n  --- apply by hand: {a.path} ---")
-                print("\n".join("  " + l for l in a.content.splitlines()))
+                print("\n".join("  " + ln for ln in a.content.splitlines()))
     return 0
 
 
@@ -491,7 +556,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.set_defaults(func=cmd_reindex)
 
     im = sub.add_parser("impact", help="what else moves if this changes")
-    im.add_argument("target", help="file path or symbol name")
+    im.add_argument("target", nargs="+", help="one or more file paths or symbol names")
     im.add_argument("--no-graph", action="store_true", help="text evidence only")
     im.add_argument("--depth", type=int, default=1, help="reverse-edge hops to follow (2 finds transitive breakage)")
     im.add_argument("--serena", action="store_true",
@@ -513,13 +578,20 @@ def build_parser() -> argparse.ArgumentParser:
     gr.set_defaults(func=cmd_graph)
 
     pl = sub.add_parser("plan", help="pre-edit gate: what this change touches and who it needs")
-    pl.add_argument("targets", nargs="+")
+    pl.add_argument("targets", nargs="*")
+    pl.add_argument("--list", action="store_true", help="show recorded plans and their ids")
     pl.add_argument("--depth", type=int, default=2)
     pl.set_defaults(func=cmd_plan)
 
     vf = sub.add_parser("verify", help="post-edit gate: diff, secrets, tests")
     vf.add_argument("--no-tests", action="store_true", help="skip execution (reports UNVERIFIED)")
     vf.add_argument("--test-command", help="override the detected test command")
+    vf.add_argument("--no-checks", action="store_true", help="skip lint, types and vulnerabilities")
+    vf.add_argument("--shell", action="store_true",
+                    help="run --test-command through a shell (needed for pipes; never applied "
+                         "to the auto-detected command, which comes from repository contents)")
+    vf.add_argument("--plan", help="verify against a named plan instead of the latest")
+    vf.add_argument("--ref", default="HEAD", help="git ref to diff the API against")
     vf.add_argument("--revert-unintended", action="store_true",
                     help="offer to discard changes the plan did not name (asks first)")
     vf.set_defaults(func=cmd_verify)
@@ -536,6 +608,9 @@ def build_parser() -> argparse.ArgumentParser:
     ev = sub.add_parser("env", help="environment variables: used, declared, missing")
     ev.add_argument("--write", action="store_true", help="write .env.example (placeholders only)")
     ev.add_argument("--json", action="store_true")
+    ev.add_argument("--get", metavar="KEY", help="read one secret from the OS store, at use time")
+    ev.add_argument("--backend", help="force a specific secret store")
+    ev.add_argument("--backends", action="store_true", help="list available secret stores")
     ev.set_defaults(func=cmd_env)
 
     dt = sub.add_parser("debt", help="technical debt registry")
@@ -555,6 +630,7 @@ def build_parser() -> argparse.ArgumentParser:
     db.add_argument("--port", type=int, default=7373)
     db.add_argument("--compact", action="store_true", help="one line, for a status line")
     db.add_argument("--json", action="store_true")
+    db.add_argument("--trend", action="store_true", help="what has moved since the first snapshot")
     db.add_argument("--static", metavar="FILE", help="write a snapshot page instead of serving")
     db.add_argument("--no-open", action="store_true", help="do not open a browser")
     db.set_defaults(func=cmd_dashboard)
@@ -567,7 +643,7 @@ def build_parser() -> argparse.ArgumentParser:
     ins.set_defaults(func=cmd_install)
 
     hk = sub.add_parser("hook", help="agent host hook handler (reads JSON on stdin)")
-    hk.add_argument("name", choices=sorted(hooks_mod.HANDLERS))
+    hk.add_argument("name", choices=sorted({**hooks_mod.HANDLERS, **hooks_mod.GATE_HOOKS}))
     hk.set_defaults(func=cmd_hook)
 
     s = sub.add_parser("status", help="store summary")
