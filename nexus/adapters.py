@@ -87,12 +87,19 @@ def claude_code(root: Path, python: str | None = None, hooks: bool = True) -> li
                                "command": f"{nexus_bin} hook post-tool",
                                "timeout": 15}]
                 }],
-            }
+            },
+            # Tokens saved are worthless if nobody sees them. The status line under
+            # the chat input is the only surface a host actually offers for this —
+            # there is no supported way to put a panel inside the conversation.
+            "statusLine": {"type": "command",
+                           "command": f"{nexus_bin} dashboard --compact",
+                           "padding": 0},
         }
         out.append(Artifact(
             ".claude/settings.json", json.dumps(settings, indent=2) + "\n",
             "SessionStart injects the project profile; PostToolUse records a test run "
-            "as an episodic memory — only when a test command actually ran"))
+            "as an episodic memory; statusLine shows memory, graph, plan and tokens "
+            "saved under the chat input"))
     return out
 
 

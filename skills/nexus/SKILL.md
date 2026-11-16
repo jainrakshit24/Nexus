@@ -82,7 +82,9 @@ nexus install all --dry-run    # see what it would write first
 
 Exposes five tools: `nexus_recall`, `nexus_remember`, `nexus_impact`, `nexus_context`, `nexus_gate`. Launch-to-`initialize` is ~44 ms on a 10k-file repo.
 
-The dashboard (`nexus dashboard`, 127.0.0.1 only) is deliberately **not** reachable from the MCP server, so watching costs the agent zero context tokens.
+`nexus install claude-code` also registers a status line under the chat input — memory count, graph freshness, active plan, **estimated tokens saved**, dirty files — and the session-start hook reports the running saved total in the conversation. No host supports a panel inside the chat, so that is the honest ceiling here.
+
+The full dashboard (`nexus dashboard`, 127.0.0.1 only) is deliberately **not** reachable from the MCP server, so watching costs the agent zero context tokens.
 
 ## Everything else
 

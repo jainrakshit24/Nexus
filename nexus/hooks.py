@@ -18,6 +18,7 @@ from pathlib import Path
 from .graph import load as load_graph
 from .record import Record
 from .store import NotInitialized, Store, find_root
+from .tokens import totals as token_totals
 
 TEST_COMMAND_HINT = re.compile(
     r"\b(pytest|npm (run )?test|yarn test|pnpm test|go test|cargo test|mvn test|"
@@ -63,6 +64,15 @@ def session_start(payload: dict, root_hint: str | None = None) -> str:  # noqa: 
         lines.append(f"Knowledge graph: {len(g.nodes)} nodes — {s.summary()}")
     except Exception:
         lines.append("Knowledge graph: not built (run `/graphify .` to create one).")
+
+    try:
+        tok = token_totals(root)
+        if tok["packs"]:
+            lines.append(
+                f"Context packing: {tok['saved_estimated']:,} tokens saved (estimated) "
+                f"over {tok['packs']} pack(s) — `nexus tokens` for the breakdown.")
+    except Exception:
+        pass
 
     lines.append("Call nexus_recall before reading files, and nexus_impact before editing one.")
     return "\n".join(lines)

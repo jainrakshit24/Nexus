@@ -157,7 +157,15 @@ Points the host at `nexus serve`, an MCP server exposing five tools:
 
 Host support — tested and untested, stated separately — is in [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
-The dashboard (`nexus dashboard`, bound to 127.0.0.1) is deliberately **not** reachable from the MCP server, so watching NEXUS costs the agent zero context tokens. That is enforced by a test, not by a promise.
+`nexus install claude-code` also registers a **status line under the chat input**, so the savings are visible where you are actually working:
+
+```
+nexus · mem 4 (3 stale) · graph 628 STALE · full:developer,security,qa · saved~28,045 · 3 dirty
+```
+
+Live memory count, graph size and freshness, the active plan and its roles, estimated tokens saved, and dirty files. The session-start hook reports the same running total in the conversation itself. There is no panel *inside* the chat — no host supports injecting one, and NEXUS does not pretend otherwise.
+
+The full dashboard (`nexus dashboard`, bound to 127.0.0.1) is deliberately **not** reachable from the MCP server, so watching NEXUS costs the agent zero context tokens. That is enforced by a test, not by a promise.
 
 ## The honesty invariant
 

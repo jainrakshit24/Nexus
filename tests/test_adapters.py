@@ -196,3 +196,24 @@ def test_the_static_page_embeds_the_state_and_needs_no_server(hooked, tmp_path):
 def test_the_page_labels_saved_as_an_estimate():
     assert "estimate" in dashboard.PAGE
     assert "counterfactual" in dashboard.PAGE
+
+
+def test_claude_code_registers_a_status_line_so_tokens_saved_are_visible(tmp_path):
+    """Savings nobody can see are savings nobody believes. The status line under the
+    chat input is the only in-conversation surface a host actually offers."""
+    settings = next(a for a in adapters.claude_code(tmp_path) if a.path.endswith("settings.json"))
+    sl = json.loads(settings.content)["statusLine"]
+    assert sl["type"] == "command"
+    assert sl["command"].endswith("dashboard --compact")
+
+
+def test_compact_line_carries_the_saved_number(tmp_path):
+    from nexus import dashboard
+    line = dashboard.compact_line({
+        "memory": {"live": 4, "stale": 0},
+        "graph": {"available": False},
+        "task": {"plan_id": None, "gear": None, "roles": []},
+        "tokens": {"packs": 3, "saved_estimated": 8206},
+        "git": {"dirty": 0},
+    })
+    assert "saved~8,206" in line
