@@ -121,3 +121,97 @@ Make it usable from every host, and prove the claims.
 - Every phase ends with tests green and `docs/` updated. No phase is "done" otherwise.
 - No phase may add an LLM loop to NEXUS. That needs an ADR and a very good reason.
 - Any claim of a measured number must point at the command that produced it.
+
+---
+
+# Follow-on phases
+
+Phases 1–4 shipped. What remained falls into two coherent groups rather than a
+long backlog: everything that makes stored knowledge **trustworthy and findable**,
+and everything that makes verification **real and binding**. Split that way, each
+phase has one thesis and can be judged on its own.
+
+---
+
+## Phase 5 — Retrieval & Memory Integrity
+
+*The memory half. Today NEXUS stores facts well and finds them only adequately,
+and a fact never gets re-checked after the code beneath it moves.*
+
+**Thesis:** the design's own join between memory and the code graph was never
+built, and that — not a missing model — is the likeliest reason recall is weak.
+
+**Deliverables**
+- **Graph expansion in retrieval.** `BLUEPRINT.md §5` specifies "FTS5 keyword match
+  **+ graph expansion** from the files in scope". Only the first half exists.
+- **Automatic `graph_refs`.** A record sourced at `src/auth.py:40` should link
+  itself to that file's graph nodes without anyone typing them.
+- **Memory staleness.** `verified_at` is written and never read again. A verified
+  fact whose source file has changed must say so instead of looking current.
+- **The embeddings decision, finally settled.** Re-run the benchmark after the
+  above. Implement hybrid local embeddings only if the number still demands it —
+  and record the decision either way, with the number that drove it.
+- **Episodic consolidation.** `BLUEPRINT.md §3` promises episodic memory decays
+  and is summarised; nothing does.
+- **Packaging.** Phase 1 deferred this to Phase 4; Phase 4 did not do it. NEXUS
+  still runs from a shim with an absolute path baked in.
+
+**Acceptance criteria**
+1. A query that shares **no keywords** with its answer, but is linked to it through
+   the graph, is retrieved in the top 5. Asserted with a fixture, not hoped for.
+2. Writing a record with `--source path:line` populates `graph_refs` automatically
+   when a graph exists, and records without a resolvable source say so rather than
+   inventing a link.
+3. A verified record whose source file changed since `verified_at` is labelled
+   stale in `recall`, in `status`, and on the dashboard. Re-verifying clears it.
+4. recall@5 re-measured on the existing 50-question benchmark and recorded in
+   `BENCHMARK.md` whatever it is. The embeddings question is closed by an ADR that
+   quotes the measured number — in either direction.
+5. Episodic records past a cutoff consolidate into one summary. Originals stay
+   readable on disk and are excluded from default recall. No information is deleted.
+6. `pip install .` into a clean virtualenv yields a working `nexus` command with no
+   reference to the development tree, and the dev shim is removed.
+7. `pytest` green, every earlier phase still passing.
+
+**Depends on:** Phases 1–4. **Risk:** medium — graph expansion changes ranking, so
+the benchmark is the only honest judge of whether it helped.
+
+---
+
+## Phase 6 — Deeper Verification & Enforcement
+
+*The gate half. Today the gate runs tests and scans for credentials. The brief
+asked for considerably more, and the gate still only advises.*
+
+**Deliverables**
+- Static analysis, linting and type checking in the post-edit gate, using whatever
+  the project already has configured — never a tool NEXUS installs behind your back.
+- Dependency vulnerability checking.
+- Breaking-change detection: public API shape before and after.
+- Database migration validation.
+- Dead-code detection where practical.
+- **Enforcement**: an optional pre-commit hook, so the gate can block rather than advise.
+- Multi-target `nexus impact` in one call.
+- `find_adr` precision — an ADR must name the file, not merely contain its stem.
+- `nexus verify --plan <id>` instead of only ever the latest.
+- OS keychain / secret-store read-at-use.
+- Specialist roles actually invoked, not merely named.
+- Dashboard history, so drift is visible as a trend.
+
+**Acceptance criteria**
+1. The gate runs the project's **own** configured linter and type checker, reports
+   their real output, and reports "not configured" rather than silently passing.
+2. A change that removes a public function is reported as a breaking change,
+   naming the callers from the impact graph.
+3. The pre-commit hook blocks a commit whose gate verdict is FAIL or BLOCKED, and
+   can be bypassed only by an explicit documented flag.
+4. A vulnerable dependency in a fixture project is reported with its advisory id.
+5. An ADR that merely contains the word "store" does not satisfy a change to
+   `store.py`; one that names the path does.
+6. No check ever reports success without captured evidence — the Phase 3 invariant,
+   extended to every new checker.
+7. `pytest` green, every earlier phase still passing.
+
+**Depends on:** Phase 5. **Risk:** medium-high — each checker is an integration with
+a third-party tool, and the honest failure mode ("not configured") must never be
+mistaken for a pass.

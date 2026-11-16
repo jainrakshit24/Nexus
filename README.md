@@ -3,7 +3,7 @@
 Local-first engineering companion: understands a codebase, remembers its evolution,
 protects its integrity, and carries that context across Claude Code, Codex and Cursor.
 
-**Status:** all four phases complete — **178 tests green**. See `docs/PHASE1.md` … `docs/PHASE4.md`, with measurements in `docs/BENCHMARK.md` and host support in `docs/COMPATIBILITY.md`.
+**Status:** five phases complete — **209 tests green**. See `docs/PHASE1.md` … `docs/PHASE5.md`, with measurements in `docs/BENCHMARK.md`, host support in `docs/COMPATIBILITY.md`, and decisions in `docs/adr/`.
 
 - `docs/RESEARCH.md` — what already exists, licenses, what to reuse vs build
 - `docs/BLUEPRINT.md` — architecture, memory lifecycle, storage, security, token strategy
@@ -20,12 +20,15 @@ engineering gates, and cross-platform portability.
 ## Quick start
 
 ```bash
+pip install .                # or: pip install -e . --no-build-isolation
+
 cd <your repo>
 nexus init .                 # discover the project, create .nexus/
 nexus remember "..." --confidence verified --source file.py:12
 nexus recall auth token      # keyword + confidence-weighted retrieval
 nexus show <name>            # record + its supersede history
 nexus status
+nexus consolidate            # fold old episodes into monthly summaries
 
 nexus graph                  # graph size + staleness, no rebuild
 nexus impact nexus/store.py --depth 2   # what breaks if this changes

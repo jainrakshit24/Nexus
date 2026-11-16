@@ -29,7 +29,8 @@ def state(root: Path) -> dict:
     try:
         stats = store.stats()
     except Exception as e:
-        stats = {"live": 0, "superseded": 0, "by_type": {}, "error": str(e)}
+        stats = {"live": 0, "superseded": 0, "stale": 0, "stale_records": [],
+                 "by_type": {}, "error": str(e)}
 
     graph: dict = {"available": False, "detail": "not built"}
     try:
@@ -68,6 +69,7 @@ def state(root: Path) -> dict:
 def compact_line(s: dict) -> str:
     """One line, for a terminal status line. No colour codes — hosts add their own."""
     mem = s["memory"]["live"]
+    stale_mem = s["memory"].get("stale", 0)
     g = s["graph"]
     graph_bit = ("graph —" if not g["available"]
                  else f"graph {g['nodes']}{'' if g['fresh'] else ' STALE'}")
@@ -78,7 +80,8 @@ def compact_line(s: dict) -> str:
     if task.get("blocked"):
         task_bit += " BLOCKED"
     dirty = s["git"]["dirty"]
-    return f"nexus · mem {mem} · {graph_bit} · {task_bit} · {tok_bit} · {dirty} dirty"
+    mem_bit = f"mem {mem}" + (f" ({stale_mem} stale)" if stale_mem else "")
+    return f"nexus · {mem_bit} · {graph_bit} · {task_bit} · {tok_bit} · {dirty} dirty"
 
 
 PAGE = """<!doctype html>
@@ -125,7 +128,8 @@ function render(s){
   const graphCls = !g.available ? 'dim' : (g.fresh ? 'ok' : 'warn');
   const taskCls = task.blocked ? 'bad' : (task.gear === 'full' ? 'warn' : 'ok');
   const rows = [
-    card('Memory', m.live, byType + ` · ${m.superseded} superseded`),
+    card('Memory', m.live, byType + ` · ${m.superseded} superseded` +
+         (m.stale ? ` · <span class="warn">${m.stale} stale</span>` : ''), m.stale ? 'warn' : ''),
     card('Knowledge graph', g.available ? g.nodes + ' nodes' : 'none', esc(g.detail), graphCls),
     card('Current task', task.plan_id ? task.gear : 'no plan',
          task.plan_id ? esc((task.targets||[]).join(', ')) + '<br>roles: ' + esc((task.roles||[]).join(', ')) : 'run <code>nexus plan &lt;file&gt;</code>', taskCls),
@@ -141,6 +145,9 @@ function render(s){
   if (stale.length) rows.push(`<div class="card full"><div class="k">Graph drift</div>
     <ul>${stale.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
     <div class="sub">rebuild with <code>/graphify . --update</code> in your agent</div></div>`);
+  if ((m.stale_records||[]).length) rows.push(`<div class="card full"><div class="k">Facts whose ground has moved</div>
+    <ul>${m.stale_records.map(r=>`<li>${esc(r.name)} — ${esc(r.why)}</li>`).join('')}</ul>
+    <div class="sub">re-verify with <code>nexus remember</code> once you have checked them</div></div>`);
   if ((task.risks||[]).length) rows.push(`<div class="card full"><div class="k">Risks on the current plan</div>
     <ul>${task.risks.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`);
   document.getElementById('grid').innerHTML = rows.join('');

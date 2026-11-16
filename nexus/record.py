@@ -6,7 +6,7 @@ import os
 import re
 import time
 from dataclasses import dataclass, field, asdict
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import yaml
@@ -54,6 +54,7 @@ class Record:
     verified_at: str = ""
     supersedes: str = ""
     superseded_by: str = ""
+    consolidated_into: str = ""  # folded into a summary; kept on disk, out of recall
     graph_refs: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
 
@@ -66,7 +67,10 @@ class Record:
         if self.confidence == "verified" and not self.source:
             raise ValueError("confidence=verified requires --source (file:line, commit, or test)")
         if self.confidence == "verified" and not self.verified_at:
-            self.verified_at = date.today().isoformat()
+            # Full precision, not seconds: truncating to the second puts the
+            # stamp up to a second *behind* the file that was just verified,
+            # which reads as "changed after verification" the instant it is written.
+            self.verified_at = datetime.now().isoformat()
         self.name = slugify(self.name)
 
     @property

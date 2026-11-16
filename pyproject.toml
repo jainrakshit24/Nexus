@@ -1,13 +1,13 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "nexus-eims"
-version = "1.0.0"
+version = "1.1.0"
 description = "Engineering Intelligence & Memory System"
 requires-python = ">=3.10"
-dependencies = ["PyYAML>=6.0"]
+dependencies = ["PyYAML>=6.0", "tiktoken>=0.7"]
 license = { text = "MIT" }
 
 [project.scripts]

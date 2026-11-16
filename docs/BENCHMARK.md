@@ -37,6 +37,27 @@ a tie. The remaining 15 misses are pure vocabulary gaps ("pictures"/"images",
 embeddings (`sqlite-vec` + a small local model) as the first Phase 3 item**, keeping
 keyword search as the other half of a hybrid, and re-run this benchmark to prove it.
 
+## 1b. What graph expansion adds
+
+`python3 bench/run_graph_recall.py` — 40 facts, each **anchored to a file**, asked
+by naming the *caller* of the module in question: a symbol that appears in no
+fact's text, name or source. Only the graph connects question to answer.
+
+| Retrieval | recall@1 | recall@3 | recall@5 |
+|---|---|---|---|
+| keyword only | 0.00 | 0.00 | 0.00 |
+| keyword **+ graph expansion** | **1.00** | **1.00** | **1.00** |
+
+p50 latency 0.2 ms either way.
+
+**Read this honestly.** 1.00 is not a general accuracy claim. The corpus places one
+fact per file and asks one hop away, so the expansion set is two or three files and
+ranking within it is trivial. On a real project with many facts per file the
+expansion set is larger and ranking will matter. What this benchmark does prove is
+the *direction*: a class of question that keyword search answers **zero** times out
+of 39 is answered by the graph, and `bench/run_recall.py` contains none of them,
+which is why that number did not move.
+
 ## 2. Context packing
 
 `nexus context "<task>" --budget 4000`, measured with `tiktoken/cl100k_base`.

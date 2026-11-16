@@ -105,8 +105,14 @@ def cmd_recall(args) -> int:
         return 1
     for r in results:
         flag = " [superseded]" if r["superseded_by"] else ""
+        if r.get("stale"):
+            flag += " [STALE]"
+        if r.get("via") == "graph":
+            flag += " [via graph]"
         src = f" — {r['source']}" if r["source"] else ""
         print(f"[{r['relevance']:5.1f}] {r['name']} ({r['type']}/{r['confidence']}){flag}{src}")
+        if r.get("stale"):
+            print(f"         stale: {r['stale']}")
         if args.full:
             body = Path(r["path"]).read_text(encoding="utf-8").split("---", 2)[-1].strip()
             print("".join(f"        {line}\n" for line in body.splitlines()))
@@ -138,6 +144,20 @@ def cmd_forget(args) -> int:
     return 0
 
 
+def cmd_consolidate(args) -> int:
+    store = _store(args)
+    results = store.consolidate_episodes(older_than_days=args.days, dry_run=args.dry_run)
+    if not results:
+        print(f"nothing to consolidate (no month with 2+ episodes older than {args.days} days)")
+        return 1
+    for r in results:
+        verb = "would fold" if args.dry_run else "folded"
+        print(f"{verb} {r['folded']} episode(s) from {r['month']} into {r['summary']}")
+    if not args.dry_run:
+        print("originals kept on disk — `nexus recall --all` still finds them")
+    return 0
+
+
 def cmd_reindex(args) -> int:
     store = _store(args)
     t0 = time.perf_counter()
@@ -156,7 +176,11 @@ def cmd_status(args) -> int:
     print(f"live      : {s['live']} record(s)")
     for t, n in sorted(s["by_type"].items()):
         print(f"  {t:<11}: {n}")
+    print(f"stale     : {s['stale']} verified record(s) whose source changed")
+    for item in s.get("stale_records", []):
+        print(f"  {item['name']}: {item['why']}")
     print(f"superseded: {s['superseded']}")
+    print(f"consolidated: {s['consolidated']}")
     print(f"index     : {s['index']}")
     return 0
 
@@ -419,7 +443,9 @@ def cmd_hook(args) -> int:
 # ---------- parser ----------
 
 def build_parser() -> argparse.ArgumentParser:
+    from . import __version__
     p = argparse.ArgumentParser(prog="nexus", description="Engineering memory for a codebase.")
+    p.add_argument("--version", action="version", version=f"nexus {__version__}")
     p.add_argument("--root", help="project root (default: nearest .nexus/ above cwd)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -455,6 +481,11 @@ def build_parser() -> argparse.ArgumentParser:
     f.add_argument("ident")
     f.add_argument("--hard", action="store_true", help="delete the file permanently")
     f.set_defaults(func=cmd_forget)
+
+    co = sub.add_parser("consolidate", help="fold old episodic records into monthly summaries")
+    co.add_argument("--days", type=int, default=30, help="age cutoff (default 30)")
+    co.add_argument("--dry-run", action="store_true")
+    co.set_defaults(func=cmd_consolidate)
 
     x = sub.add_parser("reindex", help="rebuild the SQLite index from Markdown")
     x.set_defaults(func=cmd_reindex)
