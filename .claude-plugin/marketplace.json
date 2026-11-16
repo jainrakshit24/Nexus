@@ -1,0 +1,17 @@
+{
+  "name": "nexus",
+  "owner": {
+    "name": "jainrakshit24",
+    "url": "https://github.com/jainrakshit24"
+  },
+  "description": "NEXUS — engineering intelligence and memory, as an installable Claude Code plugin.",
+  "plugins": [
+    {
+      "name": "nexus",
+      "source": "./",
+      "description": "Durable project memory, blast-radius analysis and an evidence-backed edit gate. Local-first, no model calls.",
+      "category": "engineering",
+      "keywords": ["memory", "impact-analysis", "mcp", "local-first"]
+    }
+  ]
+}

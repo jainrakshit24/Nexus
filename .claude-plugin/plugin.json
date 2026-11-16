@@ -1,0 +1,24 @@
+{
+  "name": "nexus",
+  "version": "1.2.0",
+  "description": "Local-first engineering memory and impact analysis: durable project facts, blast-radius before an edit, and a pre/post-edit gate that runs the tests instead of claiming they passed.",
+  "author": {
+    "name": "jainrakshit24",
+    "url": "https://github.com/jainrakshit24"
+  },
+  "homepage": "https://github.com/jainrakshit24/Nexus",
+  "repository": "https://github.com/jainrakshit24/Nexus",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "codebase",
+    "impact-analysis",
+    "mcp",
+    "code-review",
+    "context-engineering",
+    "local-first"
+  ],
+  "skills": [
+    "./skills/nexus"
+  ]
+}
