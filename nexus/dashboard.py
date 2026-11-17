@@ -294,11 +294,27 @@ def serve(root: Path, port: int = 7373, open_browser: bool = True) -> None:
         server.server_close()
 
 
+def embed_json(data) -> str:
+    """JSON safe to inline inside a <script> block.
+
+    `json.dumps` does not escape `<`, and an HTML parser ends a script element
+    at `</script` followed by a space, a slash or `>`. A path cannot contain a
+    literal "</script>" — `/` is not legal in a filename — but it can contain
+    `</script/`, which closes the element just as well: a repository with a
+    directory named `<` holding one named `script` is enough. Escaping `<`
+    costs nothing and parses identically.
+    """
+    return (json.dumps(data)
+            .replace("<", "\\u003c")
+            .replace("\u2028", "\\u2028")
+            .replace("\u2029", "\\u2029"))
+
+
 def render_static(root: Path, out: Path) -> Path:
     """A snapshot page with the state baked in — no server, still local-only."""
     page = PAGE.replace(
         "tick(); setInterval(tick, 3000);",
-        f"render({json.dumps(state(root))});\n"
+        f"render({embed_json(state(root))});\n"
         "document.getElementById('foot').textContent = "
         "'static snapshot · reads .nexus/ on disk · costs the agent zero tokens';")
     out = Path(out)

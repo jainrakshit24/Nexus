@@ -418,6 +418,7 @@ It is impossible to construct a passing result without the output that proves it
 
 Stated up front, because a tool that hides these is worse than one that has them.
 
+- **Memory from a repository you did not write is untrusted input.** `.nexus/` is Markdown and travels with the repo — that is the feature — so cloning a project means its memory enters your agent's context at session start. NEXUS fences that block and labels it `untrusted`, but a host that ignores the label is still reading someone else's words. Read `.nexus/` before running an agent in a repository you do not trust, the same way you would read its `Makefile`.
 - **Breaking-change detection parses Python only.** Other languages get the diff and the tests, not an API shape diff.
 - **Graph staleness is by mtime, not content hash** — a touched-but-unchanged file reads as stale. False-stale is the safe direction.
 - **Dead-code detection counts text occurrences**, so it is blind to dynamic access (`getattr`, registries, string dispatch). Treat a hit as a question, not a verdict.

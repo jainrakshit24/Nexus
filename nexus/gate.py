@@ -257,8 +257,16 @@ def save_plan(root: Path, plan: Plan) -> Path:
     return path
 
 
+# A plan id names a file. `../../../../etc/shadow` names a different one, so the
+# id is checked against what a real id looks like rather than being pasted into
+# a path. Generated ids are timestamps; `latest` is the only other legal value.
+SAFE_PLAN_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+
 def load_plan(root: Path, plan_id: str | None = None) -> Plan | None:
-    """A named plan, or the most recent one."""
+    """A named plan, or the most recent one. An id that is not an id finds nothing."""
+    if plan_id is not None and (not SAFE_PLAN_ID.match(plan_id) or plan_id.startswith(".")):
+        return None
     p = plans_dir(root) / (f"{plan_id}.json" if plan_id else "latest.json")
     if not p.exists():
         return None
