@@ -383,12 +383,15 @@ def cmd_env(args) -> int:
                   file=sys.stderr)
         return 0
 
-    rep = envman.report(store.root)
+    rep = envman.report(store.root, environment=args.env)
 
     if args.json:
         print(json.dumps({
+            "environment": rep.environment,
             "used_in_code": rep.used_in_code,
             "declared": sorted(rep.declared),
+            "declared_elsewhere": sorted(rep.declared_elsewhere),
+            "missing_for_this_environment": sorted(rep.missing_for_this_environment),
             "in_example": sorted(rep.in_example),
             "undeclared": sorted(rep.undeclared),
             "unused": sorted(rep.unused),
@@ -397,10 +400,14 @@ def cmd_env(args) -> int:
         }, indent=2))
         return 0
 
+    cascade = " + ".join(envman.ENVIRONMENTS[rep.environment])
+    print(f"environment                : {rep.environment}   ({cascade})")
     print(f"variables read by the code : {len(rep.used_in_code)}")
-    print(f"declared in .env* files    : {len(rep.declared)}  (names only — values never read)")
+    print(f"declared for {rep.environment:<14}: {len(rep.declared)}  (names only — values never read)")
     print(f"present in .env.example    : {len(rep.in_example)}")
-    for label, items in (("declared nowhere", rep.undeclared),
+    for label, items in ((f"declared for another environment, not for {rep.environment}",
+                          rep.missing_for_this_environment),
+                         ("declared nowhere", rep.undeclared),
                          ("missing from .env.example", rep.missing_from_example),
                          ("declared but unused", rep.unused),
                          ("not set in this shell", rep.missing_at_runtime)):
@@ -606,6 +613,8 @@ def build_parser() -> argparse.ArgumentParser:
     ad.set_defaults(func=cmd_adr)
 
     ev = sub.add_parser("env", help="environment variables: used, declared, missing")
+    ev.add_argument("--env", choices=sorted(envman.ENVIRONMENTS), default=envman.DEFAULT_ENVIRONMENT,
+                    help="which environment's .env cascade to validate against (default: dev)")
     ev.add_argument("--write", action="store_true", help="write .env.example (placeholders only)")
     ev.add_argument("--json", action="store_true")
     ev.add_argument("--get", metavar="KEY", help="read one secret from the OS store, at use time")

@@ -12,12 +12,14 @@ with a reason rather than a guess, and impact analysis degrades to graph + text.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
 from pathlib import Path
 
 from .mcpclient import MCPClient, MCPError
+from .symbols import iter_text_files
 
 SESSION_RE = re.compile(r"session id is [`'\"]([A-Za-z0-9_-]+)[`'\"]")
 
@@ -74,10 +76,72 @@ class Serena:
             return None
         return data if isinstance(data, dict) else None
 
+# --------------------------------------------------------------------------
+# Per-project cache
+#
+# A Serena query costs ~4.7s, almost all of it language-server cold start, and
+# a second run costs the same because nothing was kept. References can change
+# from an edit anywhere in the repo, not just in the target file, so the cache
+# is keyed on a signature of every text file's mtime and size: if that is
+# unchanged, no edit happened and the previous answer is still correct. The
+# walk costs milliseconds against seconds, and a changed repo drops the whole
+# cache rather than serving one entry that might be stale.
+# --------------------------------------------------------------------------
+
+CACHE_FILE = "serena-cache.json"
+
+
+def repo_signature(project: Path) -> str:
+    h = hashlib.sha256()
+    for f in sorted(iter_text_files(Path(project))):
+        try:
+            st = f.stat()
+        except OSError:
+            continue
+        h.update(f"{f}|{st.st_mtime_ns}|{st.st_size}\n".encode())
+    return h.hexdigest()[:16]
+
+
+def _cache_path(project: Path) -> Path:
+    return Path(project) / ".nexus" / CACHE_FILE
+
+
+def load_cache(project: Path, signature: str) -> dict:
+    """Entries from a repository in exactly this state, or nothing."""
+    try:
+        blob = json.loads(_cache_path(project).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if blob.get("signature") != signature:
+        return {}        # the repo moved; every answer in here is suspect
+    entries = blob.get("entries")
+    return entries if isinstance(entries, dict) else {}
+
+
+def save_cache(project: Path, signature: str, entries: dict) -> None:
+    path = _cache_path(project)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"signature": signature, "entries": entries}),
+                        encoding="utf-8")
+    except OSError:
+        pass             # a cache that cannot be written is not an error
+
 
 def referencing_files(project: Path, symbols: list[str], relative_path: str,
-                      timeout: float = 120.0) -> tuple[dict[str, list[str]], str | None]:
-    """Files referencing any of these symbols. Returns (hits, error_reason)."""
+                      timeout: float = 120.0,
+                      use_cache: bool = True) -> tuple[dict[str, list[str]], str | None]:
+    """Files referencing any of these symbols. Returns (hits, error_reason).
+
+    `error_reason` is a note, not a failure: a caller that cannot reach Serena
+    still gets the graph and text evidence, and is told why this half is missing.
+    """
+    sig = repo_signature(project) if use_cache else ""
+    cached = load_cache(project, sig) if use_cache else {}
+    key = f"{relative_path}::{','.join(sorted(symbols))}"
+    if key in cached:
+        return {f: list(syms) for f, syms in cached[key].items()}, None
+
     if not available():
         return {}, "serena not installed (needs `uvx` or `serena` on PATH)"
     hits: dict[str, list[str]] = {}
@@ -91,4 +155,8 @@ def referencing_files(project: Path, symbols: list[str], relative_path: str,
                     hits.setdefault(file, []).append(sym)
     except (MCPError, OSError) as e:
         return hits, f"serena unavailable: {str(e)[:160]}"
+
+    if use_cache:
+        cached[key] = hits
+        save_cache(project, sig, cached)
     return hits, None

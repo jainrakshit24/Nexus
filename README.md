@@ -193,6 +193,7 @@ Stated up front, because a tool that hides these is worse than one that has them
 - **Breaking-change detection parses Python only.** Other languages get the diff and the tests, not an API shape diff.
 - **Graph staleness is by mtime, not content hash** — a touched-but-unchanged file reads as stale. False-stale is the safe direction.
 - **Dead-code detection counts text occurrences**, so it is blind to dynamic access (`getattr`, registries, string dispatch). Treat a hit as a question, not a verdict.
+- **`--serena` costs ~4.7 s on a cold call.** Repeat queries against an unchanged repository are served from a per-project cache in 14 ms, but the first one still pays the language server's start-up. That is why it is a flag, not the default.
 - **Every benchmark here is synthetic and self-authored.** The same author wrote the corpus, the questions and the scoring. That is weak evidence by construction — treat the numbers as a floor and a direction.
 - **NEXUS has not been run against a large third-party codebase**, only against itself and against fixtures.
 - **Local embeddings were considered and declined** at recall@5 = 0.70 against a pre-registered trigger of "below 0.70". The threshold was set before the data and was not moved afterwards. Reopening conditions are in [`docs/adr/0002`](docs/adr/).

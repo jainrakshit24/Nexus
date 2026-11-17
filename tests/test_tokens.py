@@ -1,5 +1,7 @@
 """AC4: three numbers, separately labelled; only `saved` may say estimated."""
 
+from pathlib import Path
+
 from nexus import tokens
 
 
@@ -53,3 +55,16 @@ def test_missing_host_usage_says_unavailable_and_never_guesses(tmp_path):
     assert u["available"] is False
     assert "reason" in u
     assert "input_tokens" not in u
+
+
+def test_dashboard_reports_host_usage_as_unavailable_rather_than_guessing(tmp_path, monkeypatch):
+    """BLUEPRINT 9: when the host exposes no usage records the dashboard says so.
+    An estimate quietly substituted for a measurement is the failure mode here."""
+    from nexus import dashboard, store as store_mod
+    store_mod.Store.init(tmp_path)
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path / "nohome"))
+
+    s = dashboard.state(tmp_path)
+    assert s["usage"]["available"] is False
+    assert s["usage"]["reason"]
+    assert "input_tokens" not in s["usage"]

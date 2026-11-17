@@ -64,8 +64,14 @@ def state(root: Path) -> dict:
     except (OSError, subprocess.SubprocessError):
         commit, dirty_count = "", 0
 
+    try:
+        usage = tokens_mod.platform_usage(root)
+    except OSError as e:
+        usage = {"available": False, "reason": f"unreadable: {e}"}
+
     return {"root": str(root), "memory": stats, "graph": graph, "task": task,
-            "tokens": tokens_mod.totals(root), "git": {"head": commit, "dirty": dirty_count}}
+            "tokens": tokens_mod.totals(root), "usage": usage,
+            "git": {"head": commit, "dirty": dirty_count}}
 
 
 HISTORY_FILE = "history.jsonl"
@@ -172,6 +178,7 @@ margin:0 0 4px;font-weight:600}
 .v{font-size:26px;font-weight:600;line-height:1.1}
 .sub{color:var(--dim);font-size:12px;margin-top:6px;word-break:break-word}
 .ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.accent{color:var(--accent)}
+.dim{color:var(--dim)}
 table{width:100%;border-collapse:collapse;margin-top:4px}
 td{padding:3px 0;font-size:12px;vertical-align:top}
 td.l{color:var(--dim);width:42%}
@@ -189,7 +196,7 @@ function card(k, v, sub, cls){return `<div class="card"><div class="k">${esc(k)}
 <div class="v ${cls||''}">${esc(v)}</div><div class="sub">${sub||''}</div></div>`}
 function render(s){
   document.getElementById('root').textContent = s.root;
-  const g = s.graph, t = s.tokens, task = s.task, m = s.memory;
+  const g = s.graph, t = s.tokens, task = s.task, m = s.memory, u = s.usage;
   const byType = Object.entries(m.by_type||{}).map(([k,v])=>`${esc(k)} ${v}`).join(' · ') || 'empty';
   const graphCls = !g.available ? 'dim' : (g.fresh ? 'ok' : 'warn');
   const taskCls = task.blocked ? 'bad' : (task.gear === 'full' ? 'warn' : 'ok');
@@ -204,8 +211,13 @@ function render(s){
       <tr><td class="l">actual (measured)</td><td>${t.actual_measured.toLocaleString()}</td></tr>
       <tr><td class="l">baseline (measured)</td><td>${t.baseline_measured.toLocaleString()}</td></tr>
       <tr><td class="l">saved (estimated)</td><td class="accent">${t.saved_estimated.toLocaleString()}</td></tr>
-      <tr><td class="l">tokenizer</td><td>${esc(t.tokenizer)}</td></tr></table>
-      <div class="sub">“saved” is an estimate: the baseline is a counterfactual that was never run.</div></div>`
+      <tr><td class="l">tokenizer</td><td>${esc(t.tokenizer)}</td></tr>
+      <tr><td class="l">host reported usage</td><td>${u && u.available
+        ? esc(u.input_tokens.toLocaleString()) + ' in / ' + esc(u.output_tokens.toLocaleString())
+          + ' out <span class="sub">[' + esc(u.transcripts) + ' transcript(s)]</span>'
+        : '<span class="dim">unavailable</span> <span class="sub">[' + esc((u && u.reason) || 'not reported by this host') + ']</span>'}</td></tr></table>
+      <div class="sub">“saved” is an estimate: the baseline is a counterfactual that was never run.
+      Host usage is whatever the host wrote down — never a guess, and never substituted when absent.</div></div>`
   ];
   const stale = [].concat((g.changed||[]).map(f=>'changed: '+f), (g.unindexed||[]).map(f=>'never indexed: '+f), (g.deleted||[]).map(f=>'deleted: '+f));
   if (stale.length) rows.push(`<div class="card full"><div class="k">Graph drift</div>

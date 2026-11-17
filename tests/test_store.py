@@ -121,3 +121,34 @@ def test_stemming_matches_a_different_word_form(store: Store):
     store.write(Record(name="deploys", type="project",
                        body="Deployments are blue green with a soak period."))
     assert [r["name"] for r in store.recall("deployment")] == ["deploys"]
+
+
+def test_a_global_fact_written_in_one_project_is_visible_in_another(tmp_path, monkeypatch):
+    """The global tier is shared by every project, but each project owns its index.
+    Without a sync this tier looked implemented and silently was not: the fact
+    stayed invisible everywhere else until somebody ran reindex by hand."""
+    from nexus import store as store_mod
+    monkeypatch.setattr(store_mod, "GLOBAL_DIR", tmp_path / "global")
+
+    a = store_mod.Store.init(tmp_path / "a")
+    b = store_mod.Store.init(tmp_path / "b")
+    assert b.recall("tabs") == []
+
+    a.write(Record(name="org-uses-tabs", type="global", confidence="verified",
+                   source="team convention", body="We indent with tabs, never spaces."))
+
+    hits = b.recall("tabs")
+    assert [h["name"] for h in hits] == ["org-uses-tabs"]
+
+
+def test_removing_a_global_fact_removes_it_from_other_projects_too(tmp_path, monkeypatch):
+    from nexus import store as store_mod
+    monkeypatch.setattr(store_mod, "GLOBAL_DIR", tmp_path / "global")
+    a = store_mod.Store.init(tmp_path / "a")
+    b = store_mod.Store.init(tmp_path / "b")
+    _, rec, _ = a.write(Record(name="org-uses-tabs", type="global", confidence="verified",
+                               source="team convention", body="Tabs, never spaces."))
+    assert b.recall("tabs")
+
+    a.path_for(rec).unlink()
+    assert b.recall("tabs") == []

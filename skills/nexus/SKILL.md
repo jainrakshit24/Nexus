@@ -103,7 +103,7 @@ nexus graph                            # graph size and staleness, no rebuild
 - Graph staleness is by **mtime**, not content hash — a touched-but-unchanged file reads as stale. False-stale is the safe direction.
 - Dead-code detection counts text occurrences, so it is blind to dynamic access (`getattr`, registries, string dispatch). Treat a hit as a question, not a verdict.
 - Recall@5 is **0.70** on a deliberately hard paraphrase benchmark, and every benchmark in `docs/BENCHMARK.md` is synthetic and self-authored. Weak evidence by construction.
-- `--serena` adds language-server precision at ~4.7 s per call. That is why it is a flag, not the default.
+- `--serena` costs ~4.7 s on a cold call; repeat queries on an unchanged repo come from a per-project cache in ~14 ms. Any edit anywhere drops that cache, because a reference set changes when a caller is added elsewhere. Still a flag, not the default.
 - NEXUS reads knowledge graphs; it does not build them. `/graphify` does that.
 
 Full measurements: `docs/BENCHMARK.md`. Host support: `docs/COMPATIBILITY.md`. Decisions: `docs/adr/`.

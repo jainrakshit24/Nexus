@@ -1,4 +1,6 @@
 """AC4: .env.example lists every required key and not one real value."""
+import pytest
+
 from nexus import envman
 
 
@@ -80,3 +82,48 @@ def test_an_unprotected_env_file_is_detectable(tmp_path):
     assert envman.gitignore_protects_env(root) is False
     (root / ".gitignore").write_text("__pycache__/\n.env\n")
     assert envman.gitignore_protects_env(root) is True
+
+
+def _proj(tmp_path):
+    (tmp_path / "app.py").write_text(
+        'import os\nos.environ["DATABASE_URL"]\nos.getenv("API_KEY")\n', encoding="utf-8")
+    (tmp_path / ".env.production").write_text("DATABASE_URL=x\nAPI_KEY=y\n", encoding="utf-8")
+    (tmp_path / ".env.development").write_text("API_KEY=y\n", encoding="utf-8")
+    return tmp_path
+
+
+def test_a_variable_declared_only_for_prod_is_not_declared_for_dev(tmp_path):
+    """Unioning every .env* file gives dev a clean bill of health for a variable
+    that would fail at boot. That false pass is the whole point of the split."""
+    rep = envman.report(_proj(tmp_path), environ={})
+    assert rep.environment == "dev"
+    assert "DATABASE_URL" in rep.missing_for_this_environment
+    assert "DATABASE_URL" not in rep.declared
+
+
+def test_the_same_project_is_clean_for_prod(tmp_path):
+    rep = envman.report(_proj(tmp_path), environ={}, environment="prod")
+    assert rep.missing_for_this_environment == set()
+    assert {"DATABASE_URL", "API_KEY"} <= rep.declared
+
+
+def test_each_name_is_reported_under_exactly_one_heading(tmp_path):
+    rep = envman.report(_proj(tmp_path), environ={})
+    assert not (rep.undeclared & rep.missing_for_this_environment)
+
+
+def test_an_unknown_environment_is_refused_rather_than_silently_defaulted(tmp_path):
+    with pytest.raises(ValueError):
+        envman.report(tmp_path, environ={}, environment="preprod")
+
+
+def test_write_example_is_the_only_file_this_module_writes(tmp_path):
+    """`NEXUS never writes to production config` has to be a property, not a promise."""
+    import inspect
+    src = inspect.getsource(envman)
+    writers = [ln.strip() for ln in src.splitlines()
+               if "write_text(" in ln and not ln.strip().startswith("#")]
+    assert writers, "expected at least one writer to exist"
+    assert len(writers) == 1, f"a second writer appeared in envman: {writers}"
+    rep = envman.report(_proj(tmp_path), environ={})
+    assert envman.write_example(tmp_path, rep).name == ".env.example"

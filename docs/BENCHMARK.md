@@ -115,12 +115,23 @@ False-stale is the safe direction; false-fresh would not be.
 
 | | |
 |---|---|
-| cold start + session + 1 query | **4.7 s** (4.9 s on a second run — no warm cache) |
+| cold start + session + 1 query | **4.7 s** |
+| repeat query, repository unchanged | **14 ms** (served from `.nexus/serena-cache.json`) |
+| cache-validity check (`repo_signature`, 71 files) | 14.3 ms |
 | files returned for `Record` | 7 |
 
-Four to five seconds per invocation is why this is behind a flag and not the default.
-The graph answers the same question in milliseconds; Serena is for when precision
-matters more than latency, or for languages graphify's extractor does not parse.
+Four to five seconds per cold invocation is why this is behind a flag and not the
+default. The graph answers the same question in milliseconds; Serena is for when
+precision matters more than latency, or for languages graphify's extractor does
+not parse.
+
+**Why the cache is keyed the way it is.** A reference set changes when a *caller*
+is added somewhere else, not only when the target file changes — so keying on the
+target's hash would serve a confidently stale answer. The key is a signature over
+every text file's mtime and size: if that is unchanged, no edit happened anywhere
+and the previous answer is still correct. Any change drops the whole cache rather
+than serving one entry that might be wrong. That walk is the 14 ms above, against
+4.7 s for the query it replaces.
 
 ## 6. Cold start on a large repository
 

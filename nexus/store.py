@@ -75,6 +75,7 @@ class Store:
         self._stale_schema: int | None = None
         self._graph_cache: object | None = None
         self._graph_tried = False
+        self._global_sig: tuple | None = None
 
     # ---------- setup ----------
 
@@ -108,6 +109,48 @@ class Store:
             elif found != SCHEMA_VERSION:
                 self._stale_schema = found
         return self._db
+
+    def _global_signature(self) -> tuple:
+        """Cheap: names and mtimes, no parsing. Used only to decide whether to look."""
+        try:
+            return tuple(sorted((f.name, f.stat().st_mtime_ns)
+                                for f in GLOBAL_DIR.glob("*.md")))
+        except OSError:
+            return ()
+
+    def sync_global(self) -> int:
+        """Pull `~/.nexus/global/` into this project's index. Returns rows changed.
+
+        Global records belong to every project, but every project keeps its own
+        index. Without this, a convention written in one repository stays
+        invisible in all the others until somebody runs `nexus reindex` there by
+        hand — and nothing anywhere tells them to. The tier looked implemented
+        and silently was not.
+        """
+        sig = self._global_signature()
+        if sig == self._global_sig:
+            return 0
+        self._global_sig = sig
+        indexed = {r["id"]: r["hash"] for r in
+                   self.db.execute("SELECT id, hash FROM records WHERE type='global'")}
+        seen: set[str] = set()
+        changed = 0
+        for f in sorted(GLOBAL_DIR.glob("*.md")) if GLOBAL_DIR.is_dir() else []:
+            try:
+                rec = read_record(f)
+            except (ValueError, OSError):
+                continue          # not a NEXUS record; leave it alone
+            seen.add(rec.id)
+            if indexed.get(rec.id) != rec.hash:
+                self._index(rec, f)
+                changed += 1
+        for gone in set(indexed) - seen:   # removed on another machine
+            self.db.execute("DELETE FROM records WHERE id=?", (gone,))
+            self.db.execute("DELETE FROM records_fts WHERE id=?", (gone,))
+            changed += 1
+        if changed:
+            self.db.commit()
+        return changed
 
     def ensure_current_schema(self) -> int | None:
         """Rebuild the index if it was written by an older schema. Returns rows rebuilt."""
@@ -410,6 +453,7 @@ class Store:
 
     def recall(self, query: str, type_: str | None = None, limit: int = 10,
                include_superseded: bool = False, expand: bool = True) -> list[dict]:
+        self.sync_global()
         where = [] if include_superseded else ["r.superseded_by=''", "r.consolidated_into=''"]
         params: list = []
         if type_:
