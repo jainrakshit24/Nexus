@@ -461,13 +461,20 @@ skills/nexus/SKILL.md      the agent skill (skills.sh + Claude Code both read th
 tests/                     316 tests, including a security regression suite
 bench/                     the benchmarks behind every number in the README
 docs/                      blueprint, phase logs, measurements, ADRs
-site/                      the public landing page — not part of the tool
 ```
 
-**`site/` is a marketing surface and nothing imports it.** The Python package does
-not read it, the test suite does not run it, and `pyproject.toml` does not ship it.
-It lives here so the page and the benchmarks it quotes move together — see
-[`site/README.md`](site/README.md).
+**The landing page lives on the [`site`](../../tree/site) branch, not here.** It is a
+marketing surface: nothing in `nexus/` imports it, the test suite does not run it,
+and `pyproject.toml` does not ship it. Keeping it off `main` means a clone of this
+branch is the tool and only the tool — no Node toolchain, no 500-package lockfile,
+no build step between you and `pip install`.
+
+```bash
+git switch site     # the page, its own stack, its own README
+```
+
+It stays in the same repository rather than a separate one so the page and the
+benchmarks it quotes share one `docs/` directory and can be changed together.
 
 ## 🔧 Development
 
