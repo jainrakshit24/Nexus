@@ -69,3 +69,4 @@ cannot do is a worse lie than a page with no numbers at all.
 
 If a benchmark changes, change the page. If the page needs a number the benchmark
 does not have, measure it first.
+
