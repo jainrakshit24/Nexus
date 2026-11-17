@@ -22,3 +22,10 @@ graphify-out/
 
 # Serena language-server cache and local project config — generated
 .serena/
+
+# Host wiring written by `nexus install`. These carry absolute paths from the
+# machine that generated them, so they are local setup, not source. Anyone
+# cloning runs `nexus install <host>` and gets their own.
+.mcp.json
+.claude/settings.json
+.claude/settings.local.json
