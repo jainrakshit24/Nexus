@@ -29,3 +29,7 @@ graphify-out/
 .mcp.json
 .claude/settings.json
 .claude/settings.local.json
+
+# Skills installed locally by `npx skills add` — not source
+.agents/
+skills-lock.json
