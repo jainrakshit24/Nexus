@@ -69,7 +69,7 @@ nexus adr new "Move billing to Stripe Billing" --affects src/billing.py
 nexus debt add "retry loop has no ceiling" --where src/billing.py:140
 ```
 
-Confidence is `verified` (you saw it in the code or a passing test), `inferred`, or `assumed`. Always pass `--source file.py:line` when you have one: that anchors the fact to a file, so a later `nexus recall` can reach it through the graph even when the wording does not match, and so the fact is marked stale if that file's content changes.
+Confidence is `verified` (you saw it in the code or a passing test), `observed` (you saw the behaviour but not the line that causes it), or `assumed`. Those three are the only values the CLI accepts. Always pass `--source file.py:line` when you have one: that anchors the fact to a file, so a later `nexus recall` can reach it through the graph even when the wording does not match, and so the fact is marked stale if that file's content changes.
 
 **Write a fact when it would have saved you the last ten minutes.** Not a diary — a decision, a non-obvious constraint, a gotcha, a why.
 

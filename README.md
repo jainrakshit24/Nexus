@@ -165,13 +165,13 @@ nexus recall "auth token refresh"
 ```
 ```
 [100.0] refresh-tokens-are-single-use (semantic/verified) — src/auth/session.py:142
-[ 86.4] token-window-predates-mobile (project/inferred) — docs/adr/0004.md
+[ 86.4] token-window-predates-mobile (project/observed) — docs/adr/0004.md
 2 result(s) in 0.2 ms
 ```
 
 **Why first:** a verified fact costs ~30 tokens. Rediscovering it costs a file read, a wrong turn, and sometimes a bug you already fixed once. If recall comes back empty, investigate normally — then come back at Step 6.
 
-> ⚠️ Facts marked `inferred` or `assumed` are shown with that label attached. NEXUS never promotes a guess to a fact.
+> ⚠️ Facts marked `observed` or `assumed` are shown with that label attached. NEXUS never promotes a guess to a fact.
 
 ---
 
@@ -263,7 +263,7 @@ nexus remember "refresh tokens are single-use; reuse revokes the whole family" \
 | Flag | Use it for |
 |---|---|
 | `--confidence verified` | You saw it in the code, or a test proved it |
-| `--confidence inferred` | Strongly implied, not directly observed |
+| `--confidence observed` | You saw the behaviour, but not the line that causes it |
 | `--confidence assumed` | A working assumption — stored, labelled, never presented as fact |
 | `--source file.py:line` | **Always pass this when you have it** |
 
@@ -438,6 +438,36 @@ Stated up front, because a tool that hides these is worse than one that has them
 | [`docs/PHASES.md`](docs/PHASES.md) | The build plan and its acceptance criteria |
 | [`docs/PHASE1.md`](docs/PHASE1.md) … [`PHASE6.md`](docs/PHASE6.md) | What each phase shipped, and what it failed at first |
 | [`docs/adr/`](docs/adr/) | Architecture decision records |
+
+## 🗂️ Repository structure
+
+```
+nexus/                     the Python package — everything the tool does
+├── store.py               memory: Markdown truth + SQLite FTS5 cache
+├── record.py  scrub.py    one fact per file; secrets never reach disk
+├── graph.py   symbols.py  graphify adapter, AST outlines
+├── impact.py  context.py  blast radius, budgeted context packing
+├── gate.py    evidence.py pre/post-edit gates, the no-pass-without-proof rule
+├── checks.py  apishape.py lint/types/vulns, breaking-change detection
+├── migrations.py secrets.py  destructive-SQL detection, read-at-use keychain
+├── roles.py   adr.py      routing by blast radius, decision records
+├── server.py  mcpclient.py  MCP stdio server and client
+├── adapters.py hooks.py   host wiring, session hooks
+├── dashboard.py tokens.py local page, honest token accounting
+└── cli.py                 the command surface
+
+skills/nexus/SKILL.md      the agent skill (skills.sh + Claude Code both read this)
+.claude-plugin/            plugin + marketplace manifests
+tests/                     316 tests, including a security regression suite
+bench/                     the benchmarks behind every number in the README
+docs/                      blueprint, phase logs, measurements, ADRs
+site/                      the public landing page — not part of the tool
+```
+
+**`site/` is a marketing surface and nothing imports it.** The Python package does
+not read it, the test suite does not run it, and `pyproject.toml` does not ship it.
+It lives here so the page and the benchmarks it quotes move together — see
+[`site/README.md`](site/README.md).
 
 ## 🔧 Development
 
