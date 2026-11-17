@@ -14,7 +14,7 @@ Markdown under `.nexus/` is the truth; the SQLite index beside it is a rebuildab
 ## Before anything else
 
 ```bash
-command -v nexus || pip install --user "nexus-eims @ git+https://github.com/jainrakshit24/Nexus.git"
+command -v nexus || pip install --user "nexus-eims @ git+https://github.com/jainrakshit24/nexus.git"
 ```
 
 Then, once per repository:

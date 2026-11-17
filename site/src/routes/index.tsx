@@ -47,9 +47,9 @@ export const Route = createFileRoute("/")({
 });
 
 const installCommands = {
-  "skills.sh": "npx skills add jainrakshit24/Nexus",
-  "Claude Code": "/plugin marketplace add jainrakshit24/Nexus",
-  pip: 'pip install "nexus-eims @ git+https://github.com/jainrakshit24/Nexus.git"',
+  "skills.sh": "npx skills add jainrakshit24/nexus",
+  "Claude Code": "/plugin marketplace add jainrakshit24/nexus",
+  pip: 'pip install "nexus-eims @ git+https://github.com/jainrakshit24/nexus.git"',
 };
 type InstallTab = keyof typeof installCommands;
 
@@ -149,7 +149,7 @@ const limits = [
   ["EMBEDDINGS", 'Considered and declined at recall@5 = 0.70 against a pre-registered trigger of "below 0.70". The threshold was set before the data and was not moved after.'],
 ];
 
-const REPO = "https://github.com/jainrakshit24/Nexus";
+const REPO = "https://github.com/jainrakshit24/nexus";
 const BLOB = `${REPO}/blob/main`;
 
 const docGroups = [
@@ -455,7 +455,7 @@ function NexusPage() {
           <a href="#top" className="brand" aria-label="NEXUS home"><ConstellationMark /><span>NEXUS</span></a>
           <div className="nav-links">
             <a href="#docs">Docs</a><a href="#proof">Benchmarks</a>
-            <a href="https://github.com/jainrakshit24/Nexus" target="_blank" rel="noreferrer">GitHub <span className="repo-badge">MIT</span></a>
+            <a href="https://github.com/jainrakshit24/nexus" target="_blank" rel="noreferrer">GitHub <span className="repo-badge">MIT</span></a>
             <Button variant="ghost" size="icon" className="theme-toggle" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`} title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>
               <span aria-hidden="true">{theme === "dark" ? "◐" : "◑"}</span>
             </Button>
@@ -477,7 +477,7 @@ function NexusPage() {
                 ))}
               </div>
               <CopyCommand command={installCommands[installTab]} />
-              <a className="text-link hero-github" href="https://github.com/jainrakshit24/Nexus" target="_blank" rel="noreferrer">View on GitHub <ArrowRight aria-hidden="true" /></a>
+              <a className="text-link hero-github" href="https://github.com/jainrakshit24/nexus" target="_blank" rel="noreferrer">View on GitHub <ArrowRight aria-hidden="true" /></a>
             </div>
             <div className="hero-stats" aria-label="Project facts"><span>0 model calls</span><i>·</i><span>44 ms cold start</span><i>·</i><span>Python 3.10+</span></div>
           </div>
@@ -582,7 +582,7 @@ function NexusPage() {
               <div className="worked-fail"><dt>Keyword</dt><dd><strong>no match.</strong> Not one word of the question appears in the fact.</dd></div>
               <div className="worked-win"><dt>+ Graph</dt><dd><strong>found it.</strong> The question names the file; the file is where that fact was verified; the graph walks from one to the other.</dd></div>
             </dl>
-            <p className="worked-caption">On a benchmark built entirely from questions of this shape, keyword search scores <b>0.00</b> and keyword + graph scores <b>1.00</b> — a direction, not an accuracy claim. The caveat is in <a href="https://github.com/jainrakshit24/Nexus/blob/main/docs/BENCHMARK.md" target="_blank" rel="noreferrer">docs/BENCHMARK.md</a>.</p>
+            <p className="worked-caption">On a benchmark built entirely from questions of this shape, keyword search scores <b>0.00</b> and keyword + graph scores <b>1.00</b> — a direction, not an accuracy claim. The caveat is in <a href="https://github.com/jainrakshit24/nexus/blob/main/docs/BENCHMARK.md" target="_blank" rel="noreferrer">docs/BENCHMARK.md</a>.</p>
           </div>
 
           <div className="mechanics">
@@ -636,19 +636,19 @@ function NexusPage() {
               </section>
             ))}
           </div>
-          <p className="docs-footnote" data-reveal>Read them in the repository — <a href={REPO} target="_blank" rel="noreferrer">github.com/jainrakshit24/Nexus</a></p>
+          <p className="docs-footnote" data-reveal>Read them in the repository — <a href={REPO} target="_blank" rel="noreferrer">github.com/jainrakshit24/nexus</a></p>
         </section>
 
         <section id="install" className="install-section section-wrap">
           <GraphCanvas className="install-graph" />
           <div className="install-content"><p className="eyebrow" data-reveal>— 08 / INSTALL</p><h2 data-reveal>Stop re-explaining your codebase.</h2><p data-reveal>One command. Runs locally. MIT.</p>
             <div className="install-cards">{(Object.keys(installCommands) as InstallTab[]).map((method, index) => <article className="install-card" data-reveal style={{ "--reveal-index": index } as React.CSSProperties} key={method}><p className="eyebrow">{method}</p><code>{installCommands[method]}</code><CopyCommand command={installCommands[method]} label={`Copy ${method} install command`} /></article>)}</div>
-            <div className="install-links"><a className="text-link" href="https://github.com/jainrakshit24/Nexus" target="_blank" rel="noreferrer">View on GitHub <ArrowRight aria-hidden="true" /></a><a className="text-link" href="#proof">Read the benchmarks <ArrowRight aria-hidden="true" /></a></div>
+            <div className="install-links"><a className="text-link" href="https://github.com/jainrakshit24/nexus" target="_blank" rel="noreferrer">View on GitHub <ArrowRight aria-hidden="true" /></a><a className="text-link" href="#proof">Read the benchmarks <ArrowRight aria-hidden="true" /></a></div>
           </div>
         </section>
       </main>
 
-      <footer className="site-footer section-wrap"><a href="#top" className="footer-brand"><ConstellationMark /><span>NEXUS</span><small>MIT · built for agents that forget</small></a><div className="footer-links"><div><p>DOCS</p><a href="https://github.com/jainrakshit24/Nexus/blob/main/docs/BLUEPRINT.md" target="_blank" rel="noreferrer">Blueprint</a><a href="https://github.com/jainrakshit24/Nexus/blob/main/docs/BENCHMARK.md" target="_blank" rel="noreferrer">Benchmarks</a><a href="https://github.com/jainrakshit24/Nexus/blob/main/docs/COMPATIBILITY.md" target="_blank" rel="noreferrer">Compatibility</a><a href="https://github.com/jainrakshit24/Nexus/tree/main/docs/adr" target="_blank" rel="noreferrer">ADRs</a></div><div><p>SOURCE</p><a href="https://github.com/jainrakshit24/Nexus" target="_blank" rel="noreferrer">GitHub</a><a href="https://github.com/jainrakshit24/Nexus/issues" target="_blank" rel="noreferrer">Issues</a><a href="https://github.com/jainrakshit24/Nexus/blob/main/LICENSE" target="_blank" rel="noreferrer">License</a></div><div><p>INSTALL</p><a href="#install">skills.sh</a><a href="#install">Claude Code</a><a href="#install">pip</a></div></div><span id="limits" className="footer-anchor" /></footer>
+      <footer className="site-footer section-wrap"><a href="#top" className="footer-brand"><ConstellationMark /><span>NEXUS</span><small>MIT · built for agents that forget</small></a><div className="footer-links"><div><p>DOCS</p><a href="https://github.com/jainrakshit24/nexus/blob/main/docs/BLUEPRINT.md" target="_blank" rel="noreferrer">Blueprint</a><a href="https://github.com/jainrakshit24/nexus/blob/main/docs/BENCHMARK.md" target="_blank" rel="noreferrer">Benchmarks</a><a href="https://github.com/jainrakshit24/nexus/blob/main/docs/COMPATIBILITY.md" target="_blank" rel="noreferrer">Compatibility</a><a href="https://github.com/jainrakshit24/nexus/tree/main/docs/adr" target="_blank" rel="noreferrer">ADRs</a></div><div><p>SOURCE</p><a href="https://github.com/jainrakshit24/nexus" target="_blank" rel="noreferrer">GitHub</a><a href="https://github.com/jainrakshit24/nexus/issues" target="_blank" rel="noreferrer">Issues</a><a href="https://github.com/jainrakshit24/nexus/blob/main/LICENSE" target="_blank" rel="noreferrer">License</a></div><div><p>INSTALL</p><a href="#install">skills.sh</a><a href="#install">Claude Code</a><a href="#install">pip</a></div></div><span id="limits" className="footer-anchor" /></footer>
     </div>
   );
 }

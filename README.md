@@ -43,20 +43,20 @@ It is local-first. No model is called, no network is touched, nothing leaves the
 **As an agent skill** (skills.sh — works in Claude Code, Cursor, Codex and ~60 other agent dirs):
 
 ```bash
-npx skills add jainrakshit24/Nexus
+npx skills add jainrakshit24/nexus
 ```
 
 **As a Claude Code plugin:**
 
 ```
-/plugin marketplace add jainrakshit24/Nexus
+/plugin marketplace add jainrakshit24/nexus
 /plugin install nexus@nexus
 ```
 
 **As a CLI** (the skill bootstraps this for you, or do it yourself):
 
 ```bash
-pip install "nexus-eims @ git+https://github.com/jainrakshit24/Nexus.git"
+pip install "nexus-eims @ git+https://github.com/jainrakshit24/nexus.git"
 ```
 
 ## ⚡ Quick start
