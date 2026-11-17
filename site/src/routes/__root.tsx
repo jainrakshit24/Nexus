@@ -12,6 +12,9 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 
+// "/" in dev and on a custom domain, "/<repo>/" on a GitHub Pages project site.
+const asset = import.meta.env.BASE_URL;
+
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -94,11 +97,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: appCss,
       },
+      // Built through BASE_URL, not written as "/favicon.svg": a GitHub Pages
+      // project site is served from /<repo>/, and a root-absolute icon 404s there.
       // SVG first for a crisp mark at any size; the .ico carries 16-256px for
       // browsers and tooling that ignore the SVG.
-      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
-      { rel: "icon", href: "/favicon.ico", sizes: "any" },
-      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "icon", href: `${asset}favicon.svg`, type: "image/svg+xml" },
+      { rel: "icon", href: `${asset}favicon.ico`, sizes: "any" },
+      { rel: "apple-touch-icon", href: `${asset}apple-touch-icon.png` },
     ],
   }),
   shellComponent: RootShell,

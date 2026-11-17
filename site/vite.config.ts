@@ -5,7 +5,13 @@ import tailwindcss from "@tailwindcss/vite";
 import tsConfigPaths from "vite-tsconfig-paths";
 import { nitro } from "nitro/vite";
 
+// GitHub Pages serves a project site from /<repo>/, so every asset URL needs
+// that prefix. It is read from the environment rather than hardcoded: the dev
+// server and a custom domain both want "/", and only the Pages workflow sets it.
+const base = process.env.BASE_PATH ?? "/";
+
 export default defineConfig({
+  base,
   plugins: [
     tsConfigPaths(),
     tailwindcss(),

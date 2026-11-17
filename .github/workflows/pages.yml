@@ -1,0 +1,70 @@
+name: Deploy site to GitHub Pages
+
+# The page lives on the `site` branch; `main` is the Python package and has no
+# site/ directory, so building it there would do nothing.
+on:
+  push:
+    branches: [site]
+    paths: ["site/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it halfway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Test
+        run: bun run test
+
+      - name: Build static site
+        # A project site is served from https://<user>.github.io/<repo>/, so every
+        # asset URL needs that prefix. Taken from the repo name rather than hardcoded
+        # so a rename, or a fork, does not silently publish a page with dead assets.
+        run: bun run build:static
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}/
+
+      - name: Fail if the page rendered empty
+        # A blank page deploys just as happily as a real one. This is the check
+        # that notices.
+        run: |
+          test -f dist-static/index.html
+          grep -q "</html>" dist-static/index.html
+          grep -q "NEXUS" dist-static/index.html
+          echo "index.html: $(wc -c < dist-static/index.html) bytes"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist-static
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

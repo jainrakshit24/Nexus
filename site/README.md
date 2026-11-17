@@ -17,6 +17,29 @@ no analytics and calls no backend — it is static once built.
 | Icons | lucide-react |
 | Tests | Vitest |
 
+## Deploy
+
+Pushing this branch deploys the page to GitHub Pages — `.github/workflows/pages.yml`
+installs, runs the tests, renders the site to static files and publishes them.
+
+One setting has to be flipped by hand, once: **repo → Settings → Pages → Source →
+GitHub Actions**. Until that is done the workflow builds and the deploy step fails.
+
+```bash
+bun run build:static                  # what CI runs, for a custom domain or local check
+BASE_PATH=/Nexus/ bun run build:static  # what CI runs for a project page
+```
+
+GitHub Pages has no server, so `scripts/prerender.mjs` boots the built server,
+asks it for each route and writes the HTML out. Nitro ships a prerenderer, but on
+this beta it answers 404 for a build with a custom server entry while the server
+itself serves the same route fine — this is the same operation with one fewer
+moving part, and it refuses to publish a route that did not render.
+
+`BASE_PATH` exists because a project page is served from `/<repo>/`, and every
+asset URL needs that prefix. It is read from the environment, not hardcoded, so
+the dev server and a custom domain both get `/`.
+
 ## Develop
 
 ```bash
